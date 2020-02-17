@@ -1,0 +1,2638 @@
+from selenium import common as selenium_common
+from selenium.webdriver.support.ui import Select
+from autopack.api.InventoryInterface import *
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.common.by import By
+from autopack.api.WebInterface import *
+from autopack.api.SSHInterface import *
+
+
+class ManagerInterface(WebInterface):
+    logged = False
+    selected_menu = ''
+    inventory = None
+
+    def __init__(self, config_file=None, config=None):
+        super(ManagerInterface, self).__init__(config_file, config)
+        self.inventory = InventoryInterface(config_file=config_file, config=config)
+
+    # usage: self.select_menu('vCPE Management/Hardware Types')
+    def select_menu(self, item=''):
+        if not self.logged:
+            self.login()
+        if item == self.selected_menu:
+            return
+
+        new_arr = str(item).split('/')
+        # Close the old menu
+        old_arr = str(self.selected_menu).split('/')
+        start_index = len(old_arr) - 1
+        for i in range(len(old_arr) - 2, -1, -1):
+            if old_arr[i] != new_arr[i]:
+                self.waited_element_click(link_text=old_arr[i])
+                start_index -= 1
+        # Open the new one
+        for j in range(start_index, len(new_arr)):
+            self.waited_element_click(link_text=new_arr[j])
+        self.selected_menu = item
+
+    def login(self):
+        self.init_driver()
+        self.driver.get("https://" + self.get_config("ip", "") + "/#/login?returnUrl=%2F")
+        self.driver.find_element_by_name("username").send_keys(self.get_config("username", ""))
+        self.driver.find_element_by_name("password").send_keys(self.get_config("password", ""))
+        self.driver.find_element_by_xpath(
+            "(.//*[normalize-space(text()) and normalize-space(.)='Welcome'])[1]/following::button[1]").click()
+        try:
+            self.driver.find_element_by_id("sidebar")
+        except selenium_common.exceptions.NoSuchElementException:
+            raise Exception('Wrong credentials!')
+        self.logged = True
+
+    def logout(self):
+        if not self.logged:
+            logger.error("Please, login first!")
+            return
+        self.driver.get("https://{}/#/dashboard".format(self.get_config('ip')))
+        self.driver.find_element_by_xpath(
+            "(.//*[normalize-space(text()) and normalize-space(.)='Backups'])[1]/following::div[4]").click()
+        self.driver.find_element_by_link_text("Logout").click()
+        self.selected_menu = ''
+        self.logged = False
+
+    def add_hardware_type(self, device_type, cpu_model, cpu_cores=1, interfaces=1, ram=1, hdd=1):
+        self.select_menu('uCPE Management/Hardware Types')
+        self.waited_element_click(id="btn_add_new")
+        self.driver.find_element_by_id("hardware_type_name").clear()
+        self.driver.find_element_by_id("hardware_type_name").send_keys(device_type)
+        self.driver.find_element_by_id("hardware_type_cpu_model").click()
+        self.driver.find_element_by_id("hardware_type_cpu_model").clear()
+        self.driver.find_element_by_id("hardware_type_cpu_model").send_keys(cpu_model)
+        self.driver.find_element_by_id("hardware_type_cpu_cores").click()
+        self.driver.find_element_by_id("hardware_type_cpu_cores").clear()
+        self.driver.find_element_by_id("hardware_type_cpu_cores").send_keys(cpu_cores)
+        self.driver.find_element_by_id("hardware_type_interfaces").click()
+        self.driver.find_element_by_id("hardware_type_interfaces").clear()
+        self.driver.find_element_by_id("hardware_type_interfaces").send_keys(interfaces)
+        self.driver.find_element_by_id("hardware_type_ram").click()
+        self.driver.find_element_by_id("hardware_type_ram").clear()
+        self.driver.find_element_by_id("hardware_type_ram").send_keys(ram)
+        self.driver.find_element_by_id("hardware_type_hdd").click()
+        self.driver.find_element_by_id("hardware_type_hdd").clear()
+        self.driver.find_element_by_id("hardware_type_hdd").send_keys(hdd)
+        self.waited_element_click(id="btn_save", timeout_sec=2, with_error_check=True)
+
+    def modify_hardware_type(self, device_type, cpu_model=None, cpu_cores=None, interfaces=None, ram=None, hdd=None):
+        self.select_menu('uCPE Management/Hardware Types')
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(device_type)
+        self.driver.find_element_by_id("filter_btn_hw_type").click()
+        self.waited_element_click(link_text="Hardware Type", timeout_sec=2, with_error_check=True)
+        time.sleep(1)  # Wait to load the content :-)
+        table = self.driver.find_elements_by_xpath('//*[@id="hardware_types_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('HW type not found!')
+        table[0].click()
+        self.waited_element_click(id="btn_edit", timeout_sec=5, with_error_check=True)
+        if cpu_model:
+            self.driver.find_element_by_id("hardware_type_cpu_model").click()
+            self.driver.find_element_by_id("hardware_type_cpu_model").clear()
+            self.driver.find_element_by_id("hardware_type_cpu_model").send_keys(cpu_model)
+        if cpu_cores:
+            self.driver.find_element_by_id("hardware_type_cpu_cores").click()
+            self.driver.find_element_by_id("hardware_type_cpu_cores").clear()
+            self.driver.find_element_by_id("hardware_type_cpu_cores").send_keys(cpu_cores)
+        if interfaces:
+            self.driver.find_element_by_id("hardware_type_interfaces").click()
+            self.driver.find_element_by_id("hardware_type_interfaces").clear()
+            self.driver.find_element_by_id("hardware_type_interfaces").send_keys(interfaces)
+        if ram:
+            self.driver.find_element_by_id("hardware_type_ram").click()
+            self.driver.find_element_by_id("hardware_type_ram").clear()
+            self.driver.find_element_by_id("hardware_type_ram").send_keys(ram)
+        if hdd:
+            self.driver.find_element_by_id("hardware_type_hdd").click()
+            self.driver.find_element_by_id("hardware_type_hdd").clear()
+            self.driver.find_element_by_id("hardware_type_hdd").send_keys(hdd)
+        self.waited_element_click(id="btn_save", timeout_sec=2, with_error_check=True)
+
+    def delete_hardware_type(self, device_type):
+        self.select_menu('uCPE Management/Hardware Types')
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(device_type)
+        self.driver.find_element_by_id("filter_btn_hw_type").click()
+        self.waited_element_click(link_text="Hardware Type", timeout_sec=2, with_error_check=True)
+        table = self.driver.find_elements_by_xpath('//*[@id="hardware_types_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('HW type not found!')
+        table[0].click()
+        self.driver.find_element_by_id("btn_delete").click()
+        self.waited_element_click(xpath=".//button[contains(text(), 'Yes')]", timeout_sec=2, with_error_check=True)
+
+    def add_customer(self, name, market=""):
+        self.select_menu('uCPE Management/Customers')
+        self.waited_element_click(id="btn_add_new")
+        self.driver.find_element_by_id("customer_name").click()
+        self.driver.find_element_by_id("customer_name").clear()
+        self.driver.find_element_by_id("customer_name").send_keys(name)
+        self.driver.find_element_by_id("customer_market").click()
+        self.driver.find_element_by_id("customer_market").clear()
+        self.driver.find_element_by_id("customer_market").send_keys(market)
+        self.waited_element_click(id="btn_save", timeout_sec=2, with_error_check=True)
+
+    def delete_customer(self, name):
+        self.select_menu('uCPE Management/Customers')
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(name)
+        self.driver.find_element_by_id("filter_btn_customer").click()
+        self.waited_element_click(link_text="Customer Name", timeout_sec=2, with_error_check=True)
+        table = self.driver.find_elements_by_xpath('//*[@id="customers_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('Customer not found!')
+        table[0].click()
+        self.driver.find_element_by_id("btn_delete").click()
+        self.waited_element_click(xpath=".//button[contains(text(), 'Yes')]", timeout_sec=2, with_error_check=True)
+
+    def modify_customer(self, name, new_name=None, market=None):
+        self.select_menu('uCPE Management/Customers')
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(name)
+        self.driver.find_element_by_id("filter_btn_customer").click()
+        self.waited_element_click(link_text="Customer Name", timeout_sec=2, with_error_check=True)
+        time.sleep(1)  # Wait to load the content :-)
+        table = self.driver.find_elements_by_xpath('//*[@id="customers_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('Customer not found!')
+        table[0].click()
+        self.driver.find_element_by_id("btn_edit").click()
+        time.sleep(1)
+        if new_name is not None:
+            self.driver.find_element_by_id("customer_name").clear()
+            self.driver.find_element_by_id("customer_name").send_keys(new_name)
+        if market is not None:
+            self.driver.find_element_by_id("customer_market").click()
+            self.driver.find_element_by_id("customer_market").clear()
+            self.driver.find_element_by_id("customer_market").send_keys(market)
+        self.waited_element_click(id="btn_save", timeout_sec=2, with_error_check=True)
+
+    def add_service(self, name, customer, topology=""):
+        self.select_menu('uCPE Management/Services')
+        self.waited_element_click(id="btn_add_new")
+        Select(self.driver.find_element_by_id("service_customer_name")).select_by_visible_text(customer)
+        self.driver.find_element_by_id("service_customer_name").click()
+        self.driver.find_element_by_id("service_name").click()
+        self.driver.find_element_by_id("service_name").clear()
+        self.driver.find_element_by_id("service_name").send_keys(name)
+        self.driver.find_element_by_id("service_topology_type").clear()
+        self.driver.find_element_by_id("service_topology_type").send_keys(topology)
+        self.waited_element_click(id="btn_save", timeout_sec=2, with_error_check=True)
+
+    def delete_service(self, name=""):
+        self.select_menu('uCPE Management/Services')
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(name)
+        self.driver.find_element_by_id("filter_btn_service").click()
+        self.waited_element_click(link_text="Service Name", timeout_sec=2, with_error_check=True)
+        table = self.driver.find_elements_by_xpath('//*[@id="services_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('Service not found!')
+        table[0].click()
+        self.driver.find_element_by_id("btn_delete").click()
+        self.waited_element_click(xpath=".//button[contains(text(), 'Yes')]", timeout_sec=2, with_error_check=True)
+
+    def modify_service(self, name, new_name=None, topology=None):
+        self.select_menu('uCPE Management/Services')
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(name)
+        self.driver.find_element_by_id("filter_btn_service").click()
+        self.waited_element_click(link_text="Service Name", timeout_sec=2, with_error_check=True)
+        time.sleep(1)  # Wait to load the content :-)
+        table = self.driver.find_elements_by_xpath('//*[@id="services_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('Service not found!')
+        table[0].click()
+        self.driver.find_element_by_id("btn_edit").click()
+        time.sleep(1)
+        if new_name is not None:
+            self.driver.find_element_by_id("service_name").clear()
+            self.driver.find_element_by_id("service_name").send_keys(new_name)
+        if topology is not None:
+            self.driver.find_element_by_id("service_topology_type").click()
+            self.driver.find_element_by_id("service_topology_type").clear()
+            self.driver.find_element_by_id("service_topology_type").send_keys(topology)
+        self.waited_element_click(id="btn_save", timeout_sec=2, with_error_check=True)
+
+    def add_site(self, name, customer, service, site_type, address="", contact=""):
+        self.select_menu('uCPE Management/Sites')
+        self.waited_element_click(id="btn_add_new")
+        if customer:
+            Select(self.driver.find_element_by_id("site_customer_select")).select_by_visible_text(customer)
+            self.driver.find_element_by_id("site_customer_select").click()
+        if service:
+            Select(self.driver.find_element_by_id("site_service_select")).select_by_visible_text(service)
+            self.driver.find_element_by_id("site_service_select").click()
+        self.driver.find_element_by_id("site_name").click()
+        self.driver.find_element_by_id("site_name").clear()
+        self.driver.find_element_by_id("site_name").send_keys(name)
+        self.driver.find_element_by_id("site_type").click()
+        self.driver.find_element_by_id("site_type").clear()
+        self.driver.find_element_by_id("site_type").send_keys(site_type)
+        self.driver.find_element_by_id("site_address").click()
+        self.driver.find_element_by_id("site_address").clear()
+        self.driver.find_element_by_id("site_address").send_keys(address)
+        self.driver.find_element_by_id("site_contact").click()
+        self.driver.find_element_by_id("site_contact").clear()
+        self.driver.find_element_by_id("site_contact").send_keys(contact)
+        self.waited_element_click(id="btn_save", timeout_sec=2, with_error_check=True)
+
+    def delete_site(self, name):
+        self.select_menu('uCPE Management/Sites')
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(name)
+        self.driver.find_element_by_id("filter_btn_site").click()
+        self.waited_element_click(link_text="Site Name", timeout_sec=2, with_error_check=True)
+        table = self.driver.find_elements_by_xpath('//*[@id="sites_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('Site not found!')
+        table[0].click()
+        self.driver.find_element_by_id("btn_delete").click()
+        self.waited_element_click(xpath=".//button[contains(text(), 'Yes')]", timeout_sec=2, with_error_check=True)
+
+    def modify_site(self, name, new_name=None, customer=None, service=None, site_type=None, address=None, contact=None):
+        self.select_menu('uCPE Management/Sites')
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(name)
+        self.driver.find_element_by_id("filter_btn_site").click()
+        self.waited_element_click(link_text="Site Name", timeout_sec=2, with_error_check=True)
+        time.sleep(1)  # Wait to load the content :-)
+        table = self.driver.find_elements_by_xpath('//*[@id="sites_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('Site not found!')
+        table[0].click()
+        self.driver.find_element_by_id('btn_edit').click()
+        time.sleep(1)
+        if new_name is not None:
+            self.driver.find_element_by_id("site_name").clear()
+            self.driver.find_element_by_id("site_name").send_keys(new_name)
+        if customer:
+            Select(self.driver.find_element_by_id("site_customer_select")).select_by_visible_text(customer)
+            self.driver.find_element_by_id("site_customer_select").click()
+        if service:
+            Select(self.driver.find_element_by_id("site_service_select")).select_by_visible_text(service)
+            self.driver.find_element_by_id("site_service_select").click()
+        if site_type is not None:
+            self.driver.find_element_by_id("site_type").click()
+            self.driver.find_element_by_id("site_type").clear()
+            self.driver.find_element_by_id("site_type").send_keys(site_type)
+        if address is not None:
+            self.driver.find_element_by_id("site_address").click()
+            self.driver.find_element_by_id("site_address").clear()
+            self.driver.find_element_by_id("site_address").send_keys(address)
+        if contact:
+            self.driver.find_element_by_id("site_contact").click()
+            self.driver.find_element_by_id("site_contact").clear()
+            self.driver.find_element_by_id("site_contact").send_keys(contact)
+        self.waited_element_click(id="btn_save", timeout_sec=2, with_error_check=True)
+
+    def add_controller(self, name='', hostname='', ip_address='', username='', password=''):
+        self.select_menu("Controller Management/Controllers")
+        self.driver.find_element_by_id("btn_add_new").click()
+        self.driver.find_element_by_id("controller_name").clear()
+        self.driver.find_element_by_id("controller_name").send_keys(name)
+        self.driver.find_element_by_id("controller_host_name").click()
+        self.driver.find_element_by_id("controller_host_name").clear()
+        self.driver.find_element_by_id("controller_host_name").send_keys(hostname)
+        self.driver.find_element_by_id("controller_ip_address").click()
+        self.driver.find_element_by_id("controller_ip_address").clear()
+        self.driver.find_element_by_id("controller_ip_address").send_keys(ip_address)
+        self.driver.find_element_by_id("controller_username").click()
+        self.driver.find_element_by_id("controller_username").clear()
+        self.driver.find_element_by_id("controller_username").send_keys(username)
+        self.driver.find_element_by_id("controller_password").click()
+        self.driver.find_element_by_id("controller_password").clear()
+        self.driver.find_element_by_id("controller_password").send_keys(password)
+        self.waited_element_click(id="btn_save", timeout_sec=2, with_error_check=True)
+
+    def modify_controller(self, name, hostname=None, ip_address=None, username=None, password=None):
+        self.select_menu("Controller Management/Controllers")
+        self.select_menu("Controller Management/Controllers")
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(name)
+        self.driver.find_element_by_id("filter_btn_controller").click()
+        self.waited_element_click(link_text="Controller Name", timeout_sec=2, with_error_check=True)
+        time.sleep(1)  # Wait to load the content :-)
+        table = self.driver.find_elements_by_xpath('//*[@id="controllers_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('Controller not found!')
+        table[0].click()
+        self.driver.find_element_by_id("btn_view").click()
+        time.sleep(1)  # Wait to load the content :-)
+        self.waited_element_click(id="controller_name")
+        if hostname is not None:
+            self.driver.find_element_by_id("controller_host_name").click()
+            self.driver.find_element_by_id("controller_host_name").clear()
+            self.driver.find_element_by_id("controller_host_name").send_keys(hostname)
+        if ip_address is not None:
+            self.driver.find_element_by_id("controller_ip_address").click()
+            self.driver.find_element_by_id("controller_ip_address").clear()
+            self.driver.find_element_by_id("controller_ip_address").send_keys(ip_address)
+        if username is not None:
+            self.driver.find_element_by_id("controller_username").click()
+            self.driver.find_element_by_id("controller_username").clear()
+            self.driver.find_element_by_id("controller_username").send_keys(username)
+        if password is not None:
+            self.driver.find_element_by_id("controller_password").click()
+            self.driver.find_element_by_id("controller_password").clear()
+            self.driver.find_element_by_id("controller_password").send_keys(password)
+        self.waited_element_click(id="btn_save", timeout_sec=2, with_error_check=True)
+
+    def delete_controller(self, name):
+        self.select_menu("Controller Management/Controllers")
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(name)
+        self.driver.find_element_by_id("filter_btn_controller").click()
+        self.waited_element_click(link_text="Controller Name", timeout_sec=2, with_error_check=True)
+        time.sleep(1)  # Wait to load the content :-)
+        table = self.driver.find_elements_by_xpath('//*[@id="controllers_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('Controller not found!')
+        table[0].click()
+        self.driver.find_element_by_id("btn_delete").click()
+        self.waited_element_click(xpath=".//button[contains(text(), 'Yes')]", timeout_sec=2, with_error_check=True)
+
+    def add_vnf_image(self, name, description=None, vendor=None, image_format='QCOW2', file_name=None):
+        self.select_menu("Services & VNF Onboarding/VNF Images")
+        self.waited_element_click(id="btn_add_new")
+        self.driver.find_element_by_id("vnf_image_name").click()
+        self.driver.find_element_by_id("vnf_image_name").clear()
+        self.driver.find_element_by_id("vnf_image_name").send_keys(name)
+        if description:
+            self.driver.find_element_by_id("vnf_image_description").click()
+            self.driver.find_element_by_id("vnf_image_description").clear()
+            self.driver.find_element_by_id("vnf_image_description").send_keys(description)
+        if vendor:
+            self.driver.find_element_by_id("vnf_image_vendor").click()
+            self.driver.find_element_by_id("vnf_image_vendor").clear()
+            self.driver.find_element_by_id("vnf_image_vendor").send_keys(vendor)
+        if file_name:
+            dir_path = os.path.dirname(os.path.realpath(__file__)).replace('api', 'images')
+            self.driver.find_element_by_id("file_upload_file").send_keys(dir_path + "/{}".format(file_name))
+        Select(self.driver.find_element_by_id("vnf_image_format_select")).select_by_visible_text(image_format)
+        self.waited_element_click(id="btn_save", timeout_sec=10, with_error_check=True)
+
+    def modify_vnf_image(self, name, new_name, description=None, vendor=None, image_format=None, file_name=None):
+        id = self.inventory.get_vnf_image_id_by_name(name)
+        if not id:
+            raise Exception("Image with name '{}' does not exists!".format(name))
+        self.select_menu("Services & VNF Onboarding/VNF Images")
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(name)
+        self.driver.find_element_by_id("filter_btn_vnf_image").click()
+        self.waited_element_click(link_text="VNF Image Name", timeout_sec=2, with_error_check=True)
+        table = self.driver.find_elements_by_xpath('//*[@id="vnf_images_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('VNF image not found!')
+        table[0].click()
+        self.driver.find_element_by_id("btn_view").click()
+        time.sleep(1)
+        if description:
+            self.driver.find_element_by_id("vnf_image_description").click()
+            self.driver.find_element_by_id("vnf_image_description").clear()
+            self.driver.find_element_by_id("vnf_image_description").send_keys(description)
+        if vendor:
+            self.driver.find_element_by_id("vnf_image_vendor").click()
+            self.driver.find_element_by_id("vnf_image_vendor").clear()
+            self.driver.find_element_by_id("vnf_image_vendor").send_keys(vendor)
+        # if file_name:
+        #     self.driver.find_element_by_xpath("//*[@id='vnf_image_file_upload']/div/i").click()
+        #     self.driver.find_element_by_id("file_upload_file").send_keys(file_name)
+        # if image_format:
+        #     Select(self.driver.find_element_by_id("vnf_image_format_select")).select_by_visible_text(image_format)
+        self.waited_element_click(id="btn_save", timeout_sec=2, with_error_check=True)
+
+    def distribute_vnf_image(self, name, controller_name):
+        controller_id = self.inventory.get_controller_id_by_name(controller_name)
+        if not controller_id:
+            raise Exception("Controller with name '{}' not found!".format(controller_name))
+        self.select_menu("Services & VNF Onboarding/VNF Images")
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(name)
+        self.driver.find_element_by_id("filter_btn_vnf_image").click()
+        self.waited_element_click(link_text="VNF Image Name", timeout_sec=2, with_error_check=True)
+        table = self.driver.find_elements_by_xpath('//*[@id="vnf_images_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('VNF image not found!')
+        table[0].click()
+        self.waited_element_click(id="btn_distribute", timeout_sec=5, with_error_check=True)
+        self.waited_element_click(id="controller_{}_checkbox".format(controller_id), timeout_sec=2)
+        self.waited_element_click(id="upload_to_controller_btn", timeout_sec=20, with_error_check=True)
+
+    def remove_from_controller_vnf_image(self, name, controller_name):
+        controller_id = self.inventory.get_controller_id_by_name(controller_name)
+        if not controller_id:
+            raise Exception("Controller with name '{}' not found!".format(controller_name))
+        self.select_menu("Services & VNF Onboarding/VNF Images")
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(name)
+        self.driver.find_element_by_id("filter_btn_vnf_image").click()
+        self.waited_element_click(link_text="VNF Image Name", timeout_sec=2, with_error_check=True)
+        table = self.driver.find_elements_by_xpath('//*[@id="vnf_images_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('VNF image not found!')
+        table[0].click()
+        self.waited_element_click(id="btn_distribute", timeout_sec=5, with_error_check=True)
+        self.waited_element_click(id="controller_{}_checkbox".format(controller_id), timeout_sec=2)
+        self.waited_element_click(id="remove_from_controller_btn", timeout_sec=20, with_error_check=True)
+
+    def delete_vnf_image(self, name):
+        self.select_menu("Services & VNF Onboarding/VNF Images")
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(name)
+        self.driver.find_element_by_id("filter_btn_vnf_image").click()
+        self.waited_element_click(link_text="VNF Image Name", timeout_sec=2, with_error_check=True)
+        table = self.driver.find_elements_by_xpath('//*[@id="vnf_images_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('VNF image not found!')
+        table[0].click()
+        self.driver.find_element_by_id("btn_delete").click()
+        self.waited_element_click(xpath=".//button[contains(text(), 'Yes')]", timeout_sec=2, with_error_check=True)
+
+    def add_vnf_flavor(self, name, description=None, image=None, vcpus=1, ram=1024, disk=1, mem_page_size=None):
+        self.select_menu("Services & VNF Onboarding/VNF Flavors")
+        self.waited_element_click(id="btn_add_new")
+        self.driver.find_element_by_id("vnf_flavor_name").click()
+        self.driver.find_element_by_id("vnf_flavor_name").clear()
+        self.driver.find_element_by_id("vnf_flavor_name").send_keys(name)
+        if description:
+            self.driver.find_element_by_id("vnf_flavor_description").click()
+            self.driver.find_element_by_id("vnf_flavor_description").clear()
+            self.driver.find_element_by_id("vnf_flavor_description").send_keys(description)
+        if image:
+            Select(self.driver.find_element_by_id("vnf_flavor_image_select")).select_by_visible_text(image)
+        if vcpus:
+            self.driver.find_element_by_id("vnf_flavor_vcpus").click()
+            self.driver.find_element_by_id("vnf_flavor_vcpus").clear()
+            self.driver.find_element_by_id("vnf_flavor_vcpus").send_keys(vcpus)
+        if ram:
+            self.driver.find_element_by_id("vnf_flavor_ram").click()
+            self.driver.find_element_by_id("vnf_flavor_ram").clear()
+            self.driver.find_element_by_id("vnf_flavor_ram").send_keys(ram)
+        if disk:
+            self.driver.find_element_by_id("vnf_flavor_disk").click()
+            self.driver.find_element_by_id("vnf_flavor_disk").clear()
+            self.driver.find_element_by_id("vnf_flavor_disk").send_keys(disk)
+        # Add hw:mem_page_size
+        if mem_page_size:
+            self.driver.find_element_by_xpath("//input[@type='checkbox']").click()
+            self.driver.find_element_by_xpath("(//input[@type='text'])[3]").send_keys("hw:mem_page_size")
+            self.driver.find_element_by_xpath(
+                "//div[@id='pageWrapper']/app-vnf-flavor/app-metadata/div/div/div[2]/div/i").click()
+            self.driver.find_element_by_xpath("(//input[@type='text'])[5]").send_keys(mem_page_size)
+
+        self.waited_element_click(id="btn_save", timeout_sec=2, with_error_check=True)
+
+    def modify_vnf_flavor(self, name, new_name, description=None, image=None, vcpus=1, ram=1024, disk=1):
+        id = self.inventory.get_vnf_flavor_id_by_name(name)
+        if not id:
+            raise Exception("Flavor with name '{}' does not exists!".format(name))
+        self.select_menu("Services & VNF Onboarding/VNF Flavors")
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(name)
+        self.driver.find_element_by_id("filter_btn_vnf_flavor").click()
+        self.waited_element_click(link_text="VNF Flavor Name", timeout_sec=5, with_error_check=True)
+        table = self.driver.find_elements_by_xpath('//*[@id="vnf_flavors_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('VNF flavor not found!')
+        table[0].click()
+        self.driver.find_element_by_id("btn_view").click()
+        time.sleep(1)
+        self.driver.find_element_by_id("vnf_flavor_name").click()
+        self.driver.find_element_by_id("vnf_flavor_name").clear()
+        self.driver.find_element_by_id("vnf_flavor_name").send_keys(new_name)
+        if description:
+            self.driver.find_element_by_id("vnf_flavor_description").click()
+            self.driver.find_element_by_id("vnf_flavor_description").clear()
+            self.driver.find_element_by_id("vnf_flavor_description").send_keys(description)
+        if image:
+            Select(self.driver.find_element_by_id("vnf_flavor_image_select")).select_by_visible_text(image)
+        if vcpus:
+            self.driver.find_element_by_id("vnf_flavor_vcpus").click()
+            self.driver.find_element_by_id("vnf_flavor_vcpus").clear()
+            self.driver.find_element_by_id("vnf_flavor_vcpus").send_keys(vcpus)
+        if ram:
+            self.driver.find_element_by_id("vnf_flavor_ram").click()
+            self.driver.find_element_by_id("vnf_flavor_ram").clear()
+            self.driver.find_element_by_id("vnf_flavor_ram").send_keys(ram)
+        if disk:
+            self.driver.find_element_by_id("vnf_flavor_disk").click()
+            self.driver.find_element_by_id("vnf_flavor_disk").clear()
+            self.driver.find_element_by_id("vnf_flavor_disk").send_keys(disk)
+        self.waited_element_click(id="btn_save", timeout_sec=2, with_error_check=True)
+
+    def distribute_vnf_flavor(self, name, controller_name):
+        controller_id = self.inventory.get_controller_id_by_name(controller_name)
+        if not controller_id:
+            raise Exception("Controller with name '{}' not found!".format(controller_name))
+        self.select_menu("Services & VNF Onboarding/VNF Flavors")
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(name)
+        self.driver.find_element_by_id("filter_btn_vnf_flavor").click()
+        self.waited_element_click(link_text="VNF Flavor Name", timeout_sec=2, with_error_check=True)
+        table = self.driver.find_elements_by_xpath('//*[@id="vnf_flavors_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('VNF flavor not found!')
+        table[0].click()
+        self.waited_element_click(id="btn_distribute", timeout_sec=5, with_error_check=True)
+        self.waited_element_click(id="controller_{}_checkbox".format(controller_id), timeout_sec=2)
+        self.waited_element_click(id="upload_to_controller_btn", timeout_sec=20, with_error_check=True)
+
+    def remove_from_controller_vnf_flavor(self, name, controller_name):
+        controller_id = self.inventory.get_controller_id_by_name(controller_name)
+        if not controller_id:
+            raise Exception("Controller with name '{}' not found!".format(controller_name))
+        self.select_menu("Services & VNF Onboarding/VNF Flavors")
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(name)
+        self.driver.find_element_by_id("filter_btn_vnf_flavor").click()
+        self.waited_element_click(link_text="VNF Flavor Name", timeout_sec=2, with_error_check=True)
+        table = self.driver.find_elements_by_xpath('//*[@id="vnf_flavors_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('VNF flavor not found!')
+        table[0].click()
+        self.waited_element_click(id="btn_distribute", timeout_sec=5, with_error_check=True)
+        self.waited_element_click(id="controller_{}_checkbox".format(controller_id), timeout_sec=2)
+        self.waited_element_click(id="remove_from_controller_btn", timeout_sec=20, with_error_check=True)
+
+    def delete_vnf_flavor(self, name):
+        self.select_menu("Services & VNF Onboarding/VNF Flavors")
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(name)
+        self.driver.find_element_by_id("filter_btn_vnf_flavor").click()
+        self.waited_element_click(link_text="VNF Flavor Name", timeout_sec=2, with_error_check=True)
+        table = self.driver.find_elements_by_xpath('//*[@id="vnf_flavors_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('VNF flavor not found!')
+        table[0].click()
+        self.driver.find_element_by_id("btn_delete").click()
+        self.waited_element_click(xpath=".//button[contains(text(), 'Yes')]", timeout_sec=2, with_error_check=True)
+
+    def add_network(self, name, description=None, hwtype=None, type=None, segmentation=None, subtype=None, physnet=None,
+                    subnet_name=None,
+                    subnet_ip=None, gateway_enable=False, gateway_ip=None, dhcp_enable=False):
+        self.select_menu("Services & VNF Onboarding/Networks")
+        self.waited_element_click(id="btn_add_new")
+        self.driver.find_element_by_id("network_name").click()
+        self.driver.find_element_by_id("network_name").clear()
+        self.driver.find_element_by_id("network_name").send_keys(name)
+        if description:
+            self.driver.find_element_by_id("network_desc").click()
+            self.driver.find_element_by_id("network_desc").clear()
+            self.driver.find_element_by_id("network_desc").send_keys(description)
+        if hwtype:
+            Select(self.driver.find_element_by_id("network_hardware_type")).select_by_visible_text(hwtype)
+        if type:
+            Select(self.driver.find_element_by_id("network_network_type")).select_by_visible_text(type)
+        if subtype:
+            Select(self.driver.find_element_by_id("network_network_sub_type")).select_by_visible_text(subtype)
+        if physnet:
+            port_id = int(str(physnet).replace('data', ''))
+            self.driver.find_element_by_id('port_{}'.format(port_id)).click()
+        if type == "VLAN":
+            self.driver.find_element_by_id("network_segmentation_id").click()
+            self.driver.find_element_by_id("network_segmentation_id").clear()
+            self.driver.find_element_by_id("network_segmentation_id").send_keys(segmentation)
+        if subnet_name:
+            self.driver.find_element_by_id("network_subnet_name").click()
+            self.driver.find_element_by_id("network_subnet_name").clear()
+            self.driver.find_element_by_id("network_subnet_name").send_keys(subnet_name)
+        if subnet_ip:
+            self.driver.find_element_by_id("network_subnet_ip_address").click()
+            self.driver.find_element_by_id("network_subnet_ip_address").clear()
+            self.driver.find_element_by_id("network_subnet_ip_address").send_keys(subnet_ip)
+        gw_status = self.driver.find_element_by_id("network_gateway_enable_checkbox").is_selected()
+        if gw_status != gateway_enable:
+            self.driver.find_element_by_id("network_gateway_enable_checkbox").click()
+        if gateway_enable and gateway_ip:
+            self.driver.find_element_by_id("network_gateway").click()
+            self.driver.find_element_by_id("network_gateway").clear()
+            self.driver.find_element_by_id("network_gateway").send_keys(gateway_ip)
+        dhcp_status = self.driver.find_element_by_id("network_dhcp_enable_checkbox").is_selected()
+        if dhcp_status != dhcp_enable:
+            self.driver.find_element_by_id("network_dhcp_enable_checkbox").click()
+        self.waited_element_click(id="btn_save", timeout_sec=2, with_error_check=True)
+
+    def modify_network(self, name, new_name, description=None, hwtype=None, type=None, physnet=None,
+                       subnet_name=None, subnet_ip=None, gateway_enable=False, gateway_ip=None, dhcp_enable=False):
+        id = self.inventory.get_network_id_by_name(name)
+        if not id:
+            raise Exception("Network with name '{}' does not exists!".format(name))
+        self.select_menu("Services & VNF Onboarding/Networks")
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(name)
+        self.driver.find_element_by_id("filter_btn_network").click()
+        self.waited_element_click(link_text="Network Name", timeout_sec=2, with_error_check=True)
+        self.driver.find_elements_by_xpath('//a[contains(@href,"#/network/{}")]'.format(id))[1].click()
+        time.sleep(2)
+        self.driver.find_element_by_id("network_name").click()
+        self.driver.find_element_by_id("network_name").clear()
+        self.driver.find_element_by_id("network_name").send_keys(new_name)
+        # if description:
+        #     self.driver.find_element_by_id("network_description").click()
+        #     self.driver.find_element_by_id("network_description").clear()
+        #     self.driver.find_element_by_id("network_description").send_keys(description)
+        if hwtype:
+            Select(self.driver.find_element_by_id("network_hardware_type")).select_by_visible_text(hwtype)
+        if type:
+            Select(self.driver.find_element_by_id("network_network_type")).select_by_visible_text(type)
+        if physnet:
+            port_id = int(str(physnet).replace('data', ''))
+            self.driver.find_element_by_id('port_{}'.format(port_id)).click()
+        if subnet_name:
+            self.driver.find_element_by_id("network_subnet_name").click()
+            self.driver.find_element_by_id("network_subnet_name").clear()
+            self.driver.find_element_by_id("network_subnet_name").send_keys(subnet_name)
+        if subnet_ip:
+            self.driver.find_element_by_id("network_subnet_ip_address").click()
+            self.driver.find_element_by_id("network_subnet_ip_address").clear()
+            self.driver.find_element_by_id("network_subnet_ip_address").send_keys(subnet_ip)
+        gw_status = self.driver.find_element_by_id("network_gateway_enable_checkbox").is_selected()
+        if gw_status != gateway_enable:
+            self.driver.find_element_by_id("network_gateway_enable_checkbox").click()
+        if gateway_enable and gateway_ip:
+            self.driver.find_element_by_id("network_gateway").click()
+            self.driver.find_element_by_id("network_gateway").clear()
+            self.driver.find_element_by_id("network_gateway").send_keys(gateway_ip)
+        dhcp_status = self.driver.find_element_by_id("network_dhcp_enable_checkbox").is_selected()
+        if dhcp_status != dhcp_enable:
+            self.driver.find_element_by_id("network_dhcp_enable_checkbox").click()
+        self.waited_element_click(id="btn_save", timeout_sec=2, with_error_check=True)
+
+    def distribute_network(self, name, controller_name):
+        controller_id = self.inventory.get_controller_id_by_name(controller_name)
+        if not controller_id:
+            raise Exception("Controller with name '{}' not found!".format(controller_name))
+        self.select_menu("Services & VNF Onboarding/Networks")
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(name)
+        self.driver.find_element_by_id("filter_btn_network").click()
+        self.waited_element_click(link_text="Network Name", timeout_sec=2, with_error_check=True)
+        table = self.driver.find_elements_by_xpath('//*[@id="networks_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('Network not found!')
+        table[0].click()
+        self.waited_element_click(id="btn_distribute", timeout_sec=5, with_error_check=True)
+        self.waited_element_click(id="controller_{}_checkbox".format(controller_id), timeout_sec=2)
+        self.waited_element_click(id="upload_to_controller_btn", timeout_sec=5, with_error_check=True)
+
+    def remove_from_controller_network(self, name, controller_name):
+        controller_id = self.inventory.get_controller_id_by_name(controller_name)
+        if not controller_id:
+            raise Exception("Controller with name '{}' not found!".format(controller_name))
+        self.select_menu("Services & VNF Onboarding/Networks")
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(name)
+        self.driver.find_element_by_id("filter_btn_network").click()
+        self.waited_element_click(link_text="Network Name", timeout_sec=2, with_error_check=True)
+        table = self.driver.find_elements_by_xpath('//*[@id="networks_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('Network not found!')
+        table[0].click()
+        self.waited_element_click(id="btn_distribute", timeout_sec=5, with_error_check=True)
+        self.waited_element_click(id="controller_{}_checkbox".format(controller_id), timeout_sec=2)
+        self.waited_element_click(id="remove_from_controller_btn", timeout_sec=5, with_error_check=True)
+
+    def delete_network(self, name):
+        self.select_menu("Services & VNF Onboarding/Networks")
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(name)
+        self.driver.find_element_by_id("filter_btn_network").click()
+        self.waited_element_click(link_text="Network Name", timeout_sec=2, with_error_check=True)
+        time.sleep(1)
+        table = self.driver.find_elements_by_xpath('//*[@id="networks_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('Network not found!')
+        table[0].click()
+        self.driver.find_element_by_id("btn_delete").click()
+        self.waited_element_click(xpath=".//button[contains(text(), 'Yes')]", timeout_sec=2, with_error_check=True)
+
+    def add_vnf_template(self, name, description=None, template_data=None, template_file=None):
+        self.select_menu("Services & VNF Onboarding/Services Onboarding")
+        self.waited_element_click(id="btn_add_new")
+        self.driver.find_element_by_id("vnfd_name").click()
+        self.driver.find_element_by_id("vnfd_name").clear()
+        self.driver.find_element_by_id("vnfd_name").send_keys(name)
+        if description is not None:
+            self.driver.find_element_by_id("vnfd_description").click()
+            self.driver.find_element_by_id("vnfd_description").clear()
+            self.driver.find_element_by_id("vnfd_description").send_keys(description)
+        Select(self.driver.find_element_by_id("vnfd_source")).select_by_visible_text("Direct Input")
+        if template_data is not None:
+            self.driver.find_element_by_id("vnfd_yaml").send_keys(template_data)
+        if template_file is not None:
+            dir_path = os.path.dirname(os.path.realpath(__file__)).replace('api', 'Templates/ToskaTemplates')
+            template_data = open(dir_path + "/{}".format(template_file), 'r').readlines()
+            self.driver.find_element_by_id("vnfd_yaml").send_keys(template_data)
+        self.waited_element_click(id="btn_save", timeout_sec=2, with_error_check=True)
+
+    def modify_vnf_template(self, name, new_name=None, description=None):
+        self.select_menu("Services & VNF Onboarding/Services Onboarding")
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(name)
+        self.driver.find_element_by_id("filter_btn_vnfd").click()
+        self.waited_element_click(link_text="VNFD Name", timeout_sec=2, with_error_check=True)
+        table = self.driver.find_elements_by_xpath('//*[@id="vnfds_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('VNF template not found!')
+        table[0].click()
+        self.waited_element_click(id="btn_view", timeout_sec=5, with_error_check=True)
+        if new_name is not None:
+            self.driver.find_element_by_id("vnfd_name").click()
+            self.driver.find_element_by_id("vnfd_name").clear()
+            self.driver.find_element_by_id("vnfd_name").send_keys(new_name)
+        if description is not None:
+            self.driver.find_element_by_id("vnfd_description").click()
+            self.driver.find_element_by_id("vnfd_description").clear()
+            self.driver.find_element_by_id("vnfd_description").send_keys(description)
+        self.waited_element_click(id="btn_save", timeout_sec=20, with_error_check=True)
+
+    def delete_vnf_template(self, name):
+        self.select_menu("Services & VNF Onboarding/Services Onboarding")
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(name)
+        self.driver.find_element_by_id("filter_btn_vnfd").click()
+        table = self.driver.find_elements_by_xpath('//*[@id="vnfds_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('VNF template not found!')
+        table[0].click()
+        self.driver.find_element_by_id("btn_delete").click()
+        self.waited_element_click(xpath=".//button[contains(text(), 'Yes')]", timeout_sec=2, with_error_check=True)
+
+    def _fill_ucpe_data(self,
+                        ucpe={},
+                        vnf_name=None,
+                        vnf_description=None,
+                        vnfd_name=None,
+                        vnf_params=None,
+                        local_controller_username="admin",
+                        local_controller_password="admin"
+                        ):
+        site_data = self.inventory.get_site(get_value(ucpe, 'siteId'))
+        # tab 1 - Basic
+        self.driver.find_element_by_id("ucpe_wizard_serial_number").click()
+        self.driver.find_element_by_id("ucpe_wizard_serial_number").clear()
+        self.driver.find_element_by_id("ucpe_wizard_serial_number").send_keys(get_value(ucpe, 'serial_number'))
+        Select(self.driver.find_element_by_id("ucpe_wizard_hardware_type")).select_by_visible_text(
+            get_value(ucpe, 'hwtype'))
+        self.driver.find_element_by_id("ucpe_wizard_hardware_type").click()
+        Select(self.driver.find_element_by_id("ucpe_wizard_customer")).select_by_visible_text(
+            get_value(site_data, "customer.name"))
+        self.driver.find_element_by_id("ucpe_wizard_customer").click()
+        self.driver.find_element_by_id("ucpe_wizard_service").click()
+        Select(self.driver.find_element_by_id("ucpe_wizard_service")).select_by_visible_text(
+            get_value(site_data, "service.name"))
+        self.driver.find_element_by_id("ucpe_wizard_site").click()
+        Select(self.driver.find_element_by_id("ucpe_wizard_site")).select_by_visible_text(get_value(site_data, "name"))
+
+        # tab 1 - Network Service
+        ns_disabled = self.driver.find_element_by_id("disable_network_service_checkbox").is_selected()
+        if not vnf_name and not ns_disabled:  # disabled at first implementation
+            self.driver.find_element_by_id("disable_network_service_checkbox").click()
+            ns_disabled = True
+        if not ns_disabled:
+            self.driver.find_element_by_id("network_service_name").click()
+            self.driver.find_element_by_id("network_service_name").clear()
+            self.driver.find_element_by_id("network_service_name").send_keys(vnf_name)
+            if get_value(site_data, "vnf.description"):
+                self.driver.find_element_by_id("network_service_description").click()
+                self.driver.find_element_by_id("network_service_description").clear()
+                self.driver.find_element_by_id("network_service_description").send_keys(vnf_description)
+            Select(self.driver.find_element_by_xpath("network_service_descriptor")).select_by_visible_text(vnfd_name)
+            if vnf_params:
+                Select(self.driver.find_element_by_id("network_service_params_source")).select_by_visible_text(
+                    "Direct Input")
+                self.driver.find_element_by_id("network_service_yaml").send_keys(vnf_params)
+
+        # tab 1 - Network Settings
+        self.driver.find_element_by_id("ucpe_wizard_hostname").click()
+        self.driver.find_element_by_id("ucpe_wizard_hostname").clear()
+        self.driver.find_element_by_id("ucpe_wizard_hostname").send_keys(get_value(ucpe, 'hostname'))
+
+        wan_list = []
+
+        for interface in get_value(ucpe, 'interfaces'):
+            if get_value(interface, 'type') != 'ethernet':
+                continue
+            if interface['name'] == 'mgmt0':
+                continue
+            i = int(interface['name'][len('data'):])
+            wan_list.append(interface['name'])
+            self.driver.find_element_by_link_text("Interface {}".format(i)).click()
+            time.sleep(1)
+            dhcp_enabled = self.driver.find_element_by_id("enable_dhcp_checkbox").is_selected()
+            if get_value(interface, 'bootproto') == 'dhcp' and not dhcp_enabled:
+                self.driver.find_element_by_id("enable_dhcp_checkbox").click()
+                dhcp_enabled = True
+            if get_value(interface, 'bootproto') != 'dhcp' and dhcp_enabled:
+                self.driver.find_element_by_id("enable_dhcp_checkbox").click()
+                dhcp_enabled = False
+            time.sleep(1)
+            management_enabled = self.driver.find_element_by_id("enable_management_checkbox").is_selected()
+            if get_value(interface, 'management') and not management_enabled:
+                self.driver.find_element_by_id("enable_management_checkbox").click()
+            self.driver.find_element_by_id("interface_port_mode").click()
+            self.driver.find_element_by_id("interface_port_mode").send_keys(get_value(interface, 'mode'))
+            self.driver.find_element_by_id("interface_trace_host").click()
+            self.driver.find_element_by_id("interface_trace_host").clear()
+            self.driver.find_element_by_id("interface_trace_host").send_keys(get_value(interface, 'trace-host'))
+            self.driver.find_element_by_id("interface_metric").click()
+            self.driver.find_element_by_id("interface_metric").clear()
+            self.driver.find_element_by_id("interface_metric").send_keys(get_value(interface, 'metric'))
+            if not dhcp_enabled:
+                self.driver.find_element_by_id("interface_ipv4_address").clear()
+                self.driver.find_element_by_id("interface_ipv4_address").send_keys(get_value(interface, 'ipv4-prefix'))
+                self.driver.find_element_by_id("interface_gateway").clear()
+                self.driver.find_element_by_id("interface_gateway").send_keys(get_value(interface, 'gateway'))
+                self.driver.find_element_by_id("interface_dns").clear()
+                self.driver.find_element_by_id("interface_dns").send_keys(get_value(interface, 'dns'))
+            self.driver.find_element_by_id("interface_vlan").clear()
+            if get_value(interface, 'vlan'):
+                self.driver.find_element_by_id("interface_vlan").send_keys(get_value(interface, 'vlan'))
+            i += 1
+
+        wan_list.sort()
+
+        for interface in get_value(ucpe, 'interfaces'):
+            if get_value(interface, 'type') != 'lte':
+                continue
+            wan_list.append(interface['name'])
+            self.driver.find_element_by_link_text("LTE").click()
+            lte_enabled = self.driver.find_element_by_id("enable_lte_checkbox").is_selected()
+            if get_value(interface, 'enable') and not lte_enabled:
+                self.driver.find_element_by_id("enable_lte_checkbox").click()
+                lte_enabled = True
+            if lte_enabled:
+                self.driver.find_element_by_id("lte_apn").click()
+                self.driver.find_element_by_id("lte_apn").clear()
+                self.driver.find_element_by_id("lte_apn").send_keys(get_value(interface, 'apn'))
+                self.driver.find_element_by_id("lte_password").click()
+                self.driver.find_element_by_id("lte_password").clear()
+                self.driver.find_element_by_id("lte_password").send_keys(get_value(interface, 'pass'))
+                self.driver.find_element_by_id("lte_trace_host").click()
+                self.driver.find_element_by_id("lte_trace_host").clear()
+                self.driver.find_element_by_id("lte_trace_host").send_keys(get_value(interface, 'trace-host'))
+                self.driver.find_element_by_id("lte_metric").click()
+                self.driver.find_element_by_id("lte_metric").clear()
+                self.driver.find_element_by_id("lte_metric").send_keys(get_value(interface, 'metric'))
+
+        for interface in get_value(ucpe, 'interfaces'):
+            if get_value(interface, 'type') != 'openvpn':
+                continue
+            self.driver.find_element_by_link_text("VPN").click()
+            vpn_enabled = self.driver.find_element_by_id("enable_vpn_checkbox").is_selected()
+            if get_value(interface, 'enable') and not vpn_enabled:
+                self.driver.find_element_by_id("enable_vpn_checkbox").click()
+                vpn_enabled = True
+            if vpn_enabled:
+                vpn_management = self.driver.find_element_by_id("enable_management_checkbox").is_selected()
+                if get_value(interface, 'management') and not vpn_management:
+                    self.driver.find_element_by_id("enable_management_checkbox").click()
+                self.driver.find_element_by_id("vpn_concentrator_endpoint").click()
+                self.driver.find_element_by_id("vpn_concentrator_endpoint").clear()
+                self.driver.find_element_by_id("vpn_concentrator_endpoint").send_keys(
+                    get_value(interface, 'ovpn-cfg.concentrator-endpoint'))
+                self.driver.find_element_by_id("vpn_concentrator_port").click()
+                self.driver.find_element_by_id("vpn_concentrator_port").clear()
+                self.driver.find_element_by_id("vpn_concentrator_port").send_keys(
+                    get_value(interface, 'ovpn-cfg.concentrator-port'))
+            ######################
+            vpn_enabled = self.driver.find_element_by_id("enable_vpn_checkbox").is_selected()
+            if vpn_enabled and not get_value(interface, 'enable'):
+                self.driver.find_element_by_id("enable_vpn_checkbox").click()
+                vpn_enabled = False
+            if not vpn_enabled:
+                vpn_management = self.driver.find_element_by_id("enable_management_checkbox").is_selected()
+                if vpn_management and not get_value(interface, 'management'):
+                    self.driver.find_element_by_id("enable_management_checkbox").click()
+                self.driver.find_element_by_id("vpn_concentrator_endpoint").click()
+                self.driver.find_element_by_id("vpn_concentrator_endpoint").clear()
+                self.driver.find_element_by_id("vpn_concentrator_endpoint").send_keys(
+                    get_value(interface, 'ovpn-cfg.concentrator-endpoint'))
+                self.driver.find_element_by_id("vpn_concentrator_port").click()
+                self.driver.find_element_by_id("vpn_concentrator_port").clear()
+                self.driver.find_element_by_id("vpn_concentrator_port").send_keys(
+                    get_value(interface, 'ovpn-cfg.concentrator-port'))
+
+        if get_value(ucpe, 'create_tunnel'):
+            self.driver.find_element_by_link_text("IPv6").click()
+            enable_tunnel = self.driver.find_element_by_id("enable_ipv6_checkbox").is_selected()
+            if not enable_tunnel:
+                self.driver.find_element_by_id("enable_ipv6_checkbox").click()
+            self.driver.find_element_by_id("ipv6_destination_address").click()
+            self.driver.find_element_by_id("ipv6_destination_address").clear()
+            self.driver.find_element_by_id("ipv6_destination_address").send_keys(get_value(ucpe, 'dst_ipv6_addr'))
+            self.driver.find_element_by_id("ipv6_ipv4_address").click()
+            self.driver.find_element_by_id("ipv6_ipv4_address").clear()
+            self.driver.find_element_by_id("ipv6_ipv4_address").send_keys(get_value(ucpe, 'dst_ipv4_addr'))
+
+        for interface in get_value(ucpe, 'interfaces'):
+            if get_value(interface, 'type') != 'ipsecvpn':
+                # if interface['name'] != 'vti0':
+                continue
+            self.driver.find_element_by_link_text("IPsec").click()
+            ipsec_enabled = self.driver.find_element_by_id("enable_ipsec_checkbox").is_selected()
+            if get_value(interface, 'enable') and not ipsec_enabled:
+                self.driver.find_element_by_id("enable_ipsec_checkbox").click()
+                ipsec_enabled = True
+
+            if not get_value(interface, 'enable') and ipsec_enabled:
+                self.driver.find_element_by_id("enable_ipsec_checkbox").click()
+                ipsec_enabled = False
+
+            if ipsec_enabled:
+                if get_value(ucpe, 'config-mode') == "pull":
+                    Select(self.driver.find_element_by_id("ipsec_config_mode")).select_by_visible_text("Pull")
+                elif get_value(ucpe, 'config-mode') == "push":
+                    Select(self.driver.find_element_by_id("ipsec_config_mode")).select_by_visible_text("Push")
+
+                time.sleep(3)
+                self.click_clear_and_send_keys("ipsec_remote_gateway", get_value(ucpe, 'remote-gw'))
+                self.click_clear_and_send_keys("ipsec_local_id", get_value(ucpe, 'local-id'))
+                self.click_clear_and_send_keys("ipsec_remote_id", get_value(ucpe, 'remote-id'))
+
+                # IKE Phase 1
+                self.driver.find_element_by_xpath("//*[@class ='toggle-label' and contains(text(),'Local')]").click()
+                time.sleep(2)
+                if get_value(ucpe, 'local-authentication-method') == "pre-shared-keys":
+                    # IKE Phase 1 Local
+                    Select(self.driver.find_element_by_id(
+                        "ike_phase_1_round_local_authentication_method")).select_by_visible_text("Pre-shared Key")
+                    time.sleep(3)
+
+                    if get_value(ucpe, 'ike-version') == 1:
+                        self.driver.find_element_by_id('ipsec_ike_version_1').click()
+                        time.sleep(1)
+                        if get_value(ucpe, 'ike-mode') == "main":
+                            Select(self.driver.find_element_by_id("ipsec_ike_mode")).select_by_visible_text("Main")
+                        elif get_value(ucpe, 'ike-mode') == "aggressive":
+                            Select(self.driver.find_element_by_id("ipsec_ike_mode")).select_by_visible_text(
+                                "Aggressive")
+                        if not self.driver.find_element_by_id('ike_phase_1_enable_xauth').is_selected():
+                            self.driver.find_element_by_id('ike_phase_1_enable_xauth').click()
+                        self.click_clear_and_send_keys("ike_phase_1_xauth_username", get_value(ucpe, 'xauth-user'))
+                        self.click_clear_and_send_keys("ike_phase_1_xauth_password", get_value(ucpe, 'xauth-pass'))
+
+                    self.click_clear_and_send_keys("ike_phase_1_round_local_pre_shared_keys_authentication_secret",
+                                                   get_value(ucpe, 'Local-Pre-shared-Key'))
+                    self.driver.execute_script("window.scrollTo(0,document.body.scrollHeight)")
+
+                    # IKE Phase 1 Remote
+                    self.driver.find_element_by_xpath(
+                        "//*[@class ='toggle-label' and contains(text(), 'Remote')]").click()
+                    time.sleep(3)
+                    Select(self.driver.find_element_by_id(
+                        "ike_phase_1_round_remote_authentication_method")).select_by_visible_text("Pre-shared Key")
+                    time.sleep(1)
+                    self.click_clear_and_send_keys("ike_phase_1_round_remote_pre_shared_keys_authentication_secret",
+                                                   get_value(ucpe, 'Local-Pre-shared-Key'))
+
+                    ##IKE Phase 1 Proposals
+                    self.set_encryption_and_authentication(ucpe, "//*[@data-target='#collapse_proposals_1']",
+                                                           "ike_phase_1_encryption", 'ike-phase-1-encryption',
+                                                           "ike_phase_1_authentication", "ike-phase-1-authentication")
+                    ## Diffie Hellman Group
+                    self.select_dh_group(ucpe, "//*[@id ='ike_phase_1_dh{}']", "dh-groups_ph1")
+
+                    ## IKE Phase 2 Proposals
+                    self.set_encryption_and_authentication(ucpe, "//*[@data-target='#collapse_proposals_2']",
+                                                           "ike_phase_2_encryption", "ike-phase-2-encryption",
+                                                           "ike_phase_2_authentication", "ike-phase-2-authentication")
+                    # Diffie Hellman Group
+                    self.select_dh_group(ucpe, "//*[@id ='ike_phase_2_dh{}']", "dh-groups_ph2")
+                    ## IKE Phase 2 Local TS
+                    self.click_clear_and_send_keys("ike_phase_2_local_ts", get_value(ucpe, 'local-ts'))
+                    ## IKE Phase 2 Remote TS
+                    self.click_clear_and_send_keys("ike_phase_2_remote_ts", get_value(ucpe, 'remote-ts'))
+
+                if get_value(ucpe, 'local-authentication-method') == "pubkeys":
+                    ## IKE Phase 1 Local
+                    Select(self.driver.find_element_by_id(
+                        "ike_phase_1_round_local_authentication_method")).select_by_visible_text("Pubkeys")
+                    time.sleep(1)
+                    target = self.driver.find_element_by_xpath("//*[@data-target='#collapse_proposals_1']")
+                    target.location_once_scrolled_into_view
+                    time.sleep(2)
+                    self.click_clear_and_send_keys("ike_phase_1_round_local_pre_shared_keys_authentication_cert",
+                                                   get_value(ucpe, 'local-pub-cert'))
+                    self.click_clear_and_send_keys("ike_phase_1_round_local_pre_shared_keys_authentication_ca_cert",
+                                                   get_value(ucpe, 'local-pub-ca-cert'))
+                    self.click_clear_and_send_keys("ike_phase_1_round_pre_shared_keys_authentication_key",
+                                                   get_value(ucpe, 'local-pub-key'))
+                    self.click_clear_and_send_keys("ike_phase_1_round_pre_shared_keys_authentication_key_pass",
+                                                   get_value(ucpe, 'local-pub-pass'))
+
+                    # IKE Phase 1 Remote
+                    self.driver.find_element_by_xpath(
+                        "//*[@class ='toggle-label' and contains(text(), 'Remote')]").click()
+                    time.sleep(3)
+                    Select(self.driver.find_element_by_id(
+                        "ike_phase_1_round_remote_authentication_method")).select_by_visible_text("Pubkeys")
+                    time.sleep(1)
+                    self.click_clear_and_send_keys("ike_phase_1_round_remote_pre_shared_keys_authentication_cert",
+                                                   get_value(ucpe, 'local-pub-cert'))
+                    self.click_clear_and_send_keys("ike_phase_1_round_remote_pre_shared_keys_authentication_ca_cert",
+                                                   get_value(ucpe, 'local-pub-ca-cert'))
+                    ##IKE Phase 1 Proposals
+                    self.set_encryption_and_authentication(ucpe, "//*[@data-target='#collapse_proposals_1']",
+                                                           "ike_phase_1_encryption", 'ike-phase-1-encryption',
+                                                           "ike_phase_1_authentication", "ike-phase-1-authentication")
+                    ## Diffie Hellman Group
+                    self.select_dh_group(ucpe, "//*[@id ='ike_phase_1_dh{}']", "dh-groups_ph1")
+
+                    ## IKE Phase 2
+                    self.set_encryption_and_authentication(ucpe, "//*[@data-target='#collapse_proposals_2']",
+                                                           "ike_phase_2_encryption", 'ike-phase-2-encryption',
+                                                           "ike_phase_2_authentication", "ike-phase-2-authentication")
+                    # Diffie Hellman Group
+                    self.select_dh_group(ucpe, "//*[@id ='ike_phase_2_dh{}']", "dh-groups_ph2")
+                    ## IKE Phase 2 Local TS
+                    self.click_clear_and_send_keys("ike_phase_2_local_ts", get_value(ucpe, 'local-ts'))
+                    ## IKE Phase 2 Remote TS
+                    self.click_clear_and_send_keys("ike_phase_2_remote_ts", get_value(ucpe, 'remote-ts'))
+
+                if get_value(ucpe, 'local-authentication-method') == "EAP":
+                    ## EAP  IKE Phase 1 Local
+                    Select(self.driver.find_element_by_id(
+                        "ike_phase_1_round_local_authentication_method")).select_by_visible_text("Eap")
+                    time.sleep(1)
+                    self.click_clear_and_send_keys('ike_phase_1_round_eap_authentication_cert',
+                                                   get_value(ucpe, 'local-EAPCert'))
+                    self.click_clear_and_send_keys('ike_phase_1_round_eap_authentication_ca_cert',
+                                                   get_value(ucpe, 'local-EAPCaCert'))
+                    self.click_clear_and_send_keys('ike_phase_1_round_eap_authentication_key',
+                                                   get_value(ucpe, 'local-EAPKey'))
+                    self.click_clear_and_send_keys('ike_phase_1_round_eap_authentication_key_pass',
+                                                   get_value(ucpe, 'local-EAPPass'))
+                    self.click_clear_and_send_keys('ike_phase_1_round_eap_authentication_username',
+                                                   get_value(ucpe, 'local-EAPUser'))
+                    self.click_clear_and_send_keys('ike_phase_1_round_eap_authentication_password',
+                                                   get_value(ucpe, 'local-EAPUserPass'))
+
+                # logger.error("IPsec handling is not implemented in the automation framework!")
+                # pass
+
+        for interface in get_value(ucpe, 'interfaces'):
+            if get_value(interface, 'name') != 'mgmt0':
+                continue
+            self.driver.find_element_by_link_text("Mgmt").click()
+            self.driver.find_element_by_id("mgmt_ipv4").clear()
+            self.driver.find_element_by_id("mgmt_ipv4").send_keys(get_value(interface, 'ipv4-prefix'))
+            if get_value(interface, 'ipv6-prefix'):
+                self.driver.find_element_by_id("mgmt_ipv6").clear()
+                self.driver.find_element_by_id("mgmt_ipv6").send_keys(get_value(interface, 'ipv6-prefix'))
+
+        for interface in get_value(ucpe, 'interfaces'):
+            if get_value(interface, 'type') != 'nat':
+                continue
+            i = int(interface['name'][len('nat'):])
+            self.driver.find_element_by_link_text("NAT {}".format(i)).click()
+            nat_enabled = self.driver.find_element_by_id("enable_nat_checkbox").is_selected()
+            if get_value(interface, 'enable') and not nat_enabled:
+                self.driver.find_element_by_id("enable_nat_checkbox").click()
+                nat_enabled = True
+
+            if not get_value(interface, 'enable') and nat_enabled:
+                self.driver.find_element_by_id("enable_nat_checkbox").click()
+                nat_enabled = False
+
+            if nat_enabled:
+                self.driver.find_element_by_id("nat_ipv4_address").click()
+                self.driver.find_element_by_id("nat_ipv4_address").clear()
+                self.driver.find_element_by_id("nat_ipv4_address").send_keys(get_value(interface, 'ipv4-address'))
+                wan = get_value(interface, 'wan-interface', [])
+
+                for wan_local in wan:
+                    if wan_local not in wan_list:
+                        logger.error('WAN {} not found in the interface list {}'.format(wan, wan_list))
+                    else:
+                        if not self.driver.find_element_by_xpath(
+                                "(.//*[normalize-space(text()) and normalize-space(.)='WAN Interface'])[1]/following::option[{}]".format(
+                                    wan_list.index(wan_local) + 1)).is_selected():
+                            self.driver.find_element_by_xpath(
+                                "(.//*[normalize-space(text()) and normalize-space(.)='WAN Interface'])[1]/following::option[{}]".format(
+                                    wan_list.index(wan_local) + 1)).click()
+
+                # logic before:
+                # for wan in get_value(interface, 'wan-interface', []):
+                #     if wan not in wan_list:
+                #         logger.error('WAN {} not found in the interface list {}'.format(wan, wan_list))
+                #         continue
+                #     self.driver.find_element_by_xpath("(.//*[normalize-space(text()) and normalize-space(.)='WAN Interface'])[1]/following::option[{}]".format(wan_list.index(wan))).click()
+                ## self.driver.find_element_by_id("nat_select_wan_interface".format(wan_list.index(wan))).click()
+
+                if get_value(interface, 'port-forwarding-all', False):
+                    self.driver.find_element_by_id("nat_port_forwarding_all_on").click()
+                else:
+                    self.driver.find_element_by_id("nat_port_forwarding_all_off").click()
+
+        # tab 1 - Openstack
+        Select(self.driver.find_element_by_id("openstack_bind_interface")).select_by_visible_text(
+            get_value(ucpe, 'openstack.bind-interface'))
+        if get_value(ucpe, "vnf-tunneling.child-ts-type", "per-vm") != "per-vm":
+            Select(self.driver.find_element_by_id("openstack_vnf_tunneling")).select_by_visible_text("Per Network")
+        else:
+            Select(self.driver.find_element_by_id("openstack_vnf_tunneling")).select_by_visible_text("Per VM")
+        # Select(self.driver.find_element_by_id("openstack_vnf_tunneling")).select_by_visible_text(get_value(ucpe, "vnf-tunneling.child-ts-type"))
+
+        if get_value(ucpe, 'openstack.controller') and not get_value(ucpe, "openstack.cbox.enabled"):
+            Select(self.driver.find_element_by_id("select_external_controller")).select_by_visible_text(
+                get_value(ucpe, 'openstack.controller'))
+        else:
+            controller_id = get_value(ucpe, 'controllerId')
+            for controller in self.inventory.get_controllers():
+                if controller['id'] == controller_id:
+                    Select(self.driver.find_element_by_id("select_external_controller")).select_by_visible_text(
+                        controller['name'])
+        self.driver.find_element_by_id("select_external_controller").click()
+
+        local_controller = self.driver.find_element_by_id("controller_type_local_radio").is_selected()
+        if get_value(ucpe, "openstack.cbox.enabled") and not local_controller:
+            self.driver.find_element_by_id("controller_type_local_radio").click()
+            local_controller = True
+        if not get_value(ucpe, "openstack.cbox.enabled") and local_controller:
+            self.driver.find_element_by_id("controller_type_external_radio").click()
+            local_controller = False
+
+        if local_controller:
+            self.driver.find_element_by_id("local_controller_username").click()
+            self.driver.find_element_by_id("local_controller_username").clear()
+            self.driver.find_element_by_id("local_controller_username").send_keys('admin')  # local_controller_username
+            self.driver.find_element_by_id("local_controller_password").clear()
+            self.driver.find_element_by_id("local_controller_password").send_keys('admin')  # local_controller_password
+            router_speaker = self.driver.find_element_by_id("enable_router_speaker_checkbox").is_selected()
+            if get_value(ucpe, "openstack.router-speaker.enabled", False) and not router_speaker:
+                self.driver.find_element_by_id("enable_router_speaker_checkbox").click()
+                router_speaker = True
+            if router_speaker:
+                self.driver.find_element_by_id("ipv4_prefix_scope").click()
+                self.driver.find_element_by_id("ipv4_prefix_scope").clear()
+                self.driver.find_element_by_id("ipv4_prefix_scope").send_keys(
+                    get_value(ucpe, "openstack.router-speaker.ip-prefix-scope", ""))
+                if str(get_value(ucpe, "openstack.router-speaker.speaker-type", "")).find("bgp") > -1:
+                    Select(self.driver.find_element_by_id("speaker_type")).select_by_visible_text(
+                        "Quagga BGP")
+                    self.driver.find_element_by_id("quagga_bgp_host").click()
+                    self.driver.find_element_by_id("quagga_bgp_host").clear()
+                    self.driver.find_element_by_id("quagga_bgp_host").send_keys(get_value(
+                        ucpe, "openstack.router-speaker.quagga-bgp.host", ""))
+
+                    self.driver.find_element_by_id("quagga_bgp_password").click()
+                    self.driver.find_element_by_id("quagga_bgp_password").clear()
+                    self.driver.find_element_by_id("quagga_bgp_password").send_keys(get_value(
+                        ucpe, "openstack.router-speaker.quagga-bgp.login-password", ""))
+
+                    self.driver.find_element_by_id("quagga_bgp_local_as").click()
+                    self.driver.find_element_by_id("quagga_bgp_local_as").clear()
+                    self.driver.find_element_by_id("quagga_bgp_local_as").send_keys(get_value(
+                        ucpe, "openstack.router-speaker.quagga-bgp.local-as", ""))
+                else:
+                    Select(self.driver.find_element_by_id("speaker_type")).select_by_visible_text(
+                        "Open VPN")
+                    self.driver.find_element_by_id("concentrator_vpn_ip").click()
+                    self.driver.find_element_by_id("concentrator_vpn_ip").clear()
+                    self.driver.find_element_by_id("concentrator_vpn_ip").send_keys(get_value(
+                        ucpe, "openstack.router-speaker.concentrator-vpn.concentrator", ""))
+
+                    self.driver.find_element_by_id("concentrator_vpn_port").click()
+                    self.driver.find_element_by_id("concentrator_vpn_port").clear()
+                    self.driver.find_element_by_id("concentrator_vpn_port").send_keys(get_value(
+                        ucpe, "openstack.router-speaker.concentrator-vpn.concentrator-port", ""))
+        else:
+            Select(self.driver.find_element_by_id("select_external_controller")).select_by_visible_text(
+                get_value(ucpe, 'openstack.controller'))
+
+        dhcp_relay = self.driver.find_element_by_id("dhcpe_relay_enable_checkbox").is_selected()
+        if get_value(ucpe, "dhcp_relay.enabled", False) and not dhcp_relay:
+            self.driver.find_element_by_id("dhcpe_relay_enable_checkbox").click()
+            dhcp_relay = True
+        if dhcp_relay:
+            self.driver.find_element_by_id("dhcp_relay_server").click()
+            self.driver.find_element_by_id("dhcp_relay_server").clear()
+            self.driver.find_element_by_id("dhcp_relay_server").send_keys(
+                get_value(ucpe, "dhcp_relay.dhcp-relay-server"))
+            self.driver.find_element_by_id("dhcp_relay_interfaces").click()
+            self.driver.find_element_by_id("dhcp_relay_interfaces").clear()
+            self.driver.find_element_by_id("dhcp_relay_interfaces").send_keys(
+                get_value(ucpe, "dhcp_relay.dhcp-relay-interface"))
+            Select(self.driver.find_element_by_id("dhcp_relay_link_selection")).select_by_visible_text(
+                get_value(ucpe, "dhcp_relay.link-selection-sub-option"))
+
+        # tab 2
+        self.driver.find_element_by_xpath("//input[@value='Next']").click()
+        # tab 2 - System Resources
+        self.driver.find_element_by_id("ucpe_wizard_host_reserved_memory").click()
+        self.driver.find_element_by_id("ucpe_wizard_host_reserved_memory").clear()
+        self.driver.find_element_by_id("ucpe_wizard_host_reserved_memory").send_keys(
+            get_value(ucpe, 'host_reserved_memory'))
+        self.driver.find_element_by_id("ucpe_wizard_host_reserved_cpus").click()
+        self.driver.find_element_by_id("ucpe_wizard_host_reserved_cpus").clear()
+        self.driver.find_element_by_id("ucpe_wizard_host_reserved_cpus").send_keys(
+            get_value(ucpe, 'host_reserved_cpus'))
+        oversubscribe = self.driver.find_element_by_id("ucpe_wizard_enable_cpu_oversubscribe_checkbox").is_selected()
+        if oversubscribe != get_value(ucpe, "host_oversubscribe_enabled", True):
+            self.driver.find_element_by_id("ucpe_wizard_enable_cpu_oversubscribe_checkbox").click()
+        self.driver.find_element_by_id("ucpe_wizard_dpdk_reserved_cpus").click()
+        self.driver.find_element_by_id("ucpe_wizard_dpdk_reserved_cpus").clear()
+        self.driver.find_element_by_id("ucpe_wizard_dpdk_reserved_cpus").send_keys(
+            get_value(ucpe, 'dpdk_reserved_cpus'))
+
+        # tab 2 - ZTP
+        homecalling_enabled = self.driver.find_element_by_id("ucpe_wizard_enable_ztp_checkbox").is_selected()
+        if get_value(ucpe, 'homecalling_enabled') and not homecalling_enabled:
+            self.driver.find_element_by_id("ucpe_wizard_enable_ztp_checkbox").click()
+
+        is_twofactor_auth = self.driver.find_element_by_id("ucpe_wizard_two_factor_auth").is_selected()
+        if get_value(ucpe, 'is_twofactor_auth') and not is_twofactor_auth:
+            self.driver.find_element_by_id("ucpe_wizard_two_factor_auth").click()
+
+        # tab 2 - Routing
+        if get_value(ucpe, 'quagga_enabled'):
+            routing_enabled = self.driver.find_element_by_id("ucpe_wizard_enable_routing_checkbox").is_selected()
+            if not routing_enabled:
+                self.driver.find_element_by_id("ucpe_wizard_enable_routing_checkbox").click()
+            self.driver.find_element_by_id("ucpe_wizard_quagga_server_address").click()
+            self.driver.find_element_by_id("ucpe_wizard_quagga_server_address").clear()
+            self.driver.find_element_by_id("ucpe_wizard_quagga_server_address").send_keys(
+                get_value(ucpe, 'quagga_server_address'))
+            Select(self.driver.find_element_by_id("ucpe_wizard_quagga_protocol")).select_by_visible_text(
+                get_value(ucpe, 'quagga_protocol'))
+            self.driver.find_element_by_id("ucpe_wizard_quagga_username").click()
+            self.driver.find_element_by_id("ucpe_wizard_quagga_username").clear()
+            self.driver.find_element_by_id("ucpe_wizard_quagga_username").send_keys(get_value(ucpe, 'quagga_username'))
+            self.driver.find_element_by_id("ucpe_wizard_quagga_password").click()
+            self.driver.find_element_by_id("ucpe_wizard_quagga_password").clear()
+            self.driver.find_element_by_id("ucpe_wizard_quagga_password").send_keys(get_value(ucpe, 'quagga_password'))
+
+            # USE IT LIKE THIS AND NOTE THAT CAN USE ONLY SUBFOLTED test/Templates/performance/config:
+            #       vars:
+            #         template:
+            #           bgp_file_upl: 'test/nfvtime/device/Quagga/Configs/bgpd.conf'
+            #           bgp_file_upl: ''                  # IF YOU WANT TO REMOVE FILE
+
+            zebra_file_uploaded = self.driver.find_element_by_xpath(
+                "(.//*[normalize-space(text()) and normalize-space(.)='Static routing File'])[1]/following::label[1]").text.find(
+                'conf') != -1
+            if get_value(ucpe, 'zebra_file_upl'):
+                if zebra_file_uploaded == False:
+                    self.driver.find_element_by_id('file_upload_file_static').send_keys(
+                        os.path.dirname(os.path.realpath(__file__)).replace('api', get_value(ucpe, 'zebra_file_upl')))
+            elif zebra_file_uploaded:
+                self.driver.find_element_by_xpath(
+                    "(.//*[normalize-space(text()) and normalize-space(.)='zebra.conf'])[1]/following::i[1]").click()
+
+            ospf_file_uploaded = self.driver.find_element_by_xpath(
+                "(.//*[normalize-space(text()) and normalize-space(.)='OSPF File'])[1]/following::label[1]").text.find(
+                'conf') != -1
+            if get_value(ucpe, 'ospf_file_upl'):
+                if ospf_file_uploaded == False:
+                    self.driver.find_element_by_id('file_upload_file_ospf').send_keys(
+                        os.path.dirname(os.path.realpath(__file__)).replace('api', get_value(ucpe, 'ospf_file_upl')))
+            elif ospf_file_uploaded:
+                self.driver.find_element_by_xpath(
+                    "(.//*[normalize-space(text()) and normalize-space(.)='ospfd.conf'])[1]/following::i[1]").click()
+
+            bgp_file_uploaded = self.driver.find_element_by_xpath(
+                "(.//*[normalize-space(text()) and normalize-space(.)='BGP File'])[1]/following::label[1]").text.find(
+                'conf') != -1
+            if get_value(ucpe, 'bgp_file_upl'):
+                if bgp_file_uploaded == False:
+                    self.driver.find_element_by_id('file_upload_file_bgp').send_keys(
+                        os.path.dirname(os.path.realpath(__file__)).replace('api', get_value(ucpe, 'bgp_file_upl')))
+            elif bgp_file_uploaded:
+                self.driver.find_element_by_xpath(
+                    "(.//*[normalize-space(text()) and normalize-space(.)='bgpd.conf'])[1]/following::i[1]").click()
+
+
+        else:
+            routing_enabled = self.driver.find_element_by_id("ucpe_wizard_enable_routing_checkbox").is_selected()
+            if routing_enabled:
+                self.driver.find_element_by_id("ucpe_wizard_quagga_server_address").click()
+                self.driver.find_element_by_id("ucpe_wizard_quagga_server_address").clear()
+                self.driver.find_element_by_id("ucpe_wizard_quagga_server_address").send_keys(
+                    get_value(ucpe, 'quagga_server_address'))
+                Select(self.driver.find_element_by_id("ucpe_wizard_quagga_protocol")).select_by_visible_text(
+                    get_value(ucpe, 'quagga_protocol'))
+                self.driver.find_element_by_id("ucpe_wizard_quagga_username").click()
+                self.driver.find_element_by_id("ucpe_wizard_quagga_username").clear()
+                self.driver.find_element_by_id("ucpe_wizard_quagga_username").send_keys(
+                    get_value(ucpe, 'quagga_username'))
+                self.driver.find_element_by_id("ucpe_wizard_quagga_password").click()
+                self.driver.find_element_by_id("ucpe_wizard_quagga_password").clear()
+                self.driver.find_element_by_id("ucpe_wizard_quagga_password").send_keys(
+                    get_value(ucpe, 'quagga_password'))
+                self.driver.find_element_by_id("ucpe_wizard_enable_routing_checkbox").click()
+
+        # tab 2 - Security
+        if get_value(ucpe, 'auth_type', 'local') == 'local':
+            Select(self.driver.find_element_by_id("ucpe_wizard_auth_type")).select_by_visible_text('Local')
+            # Workaround because clear method i.e. self.driver.find_element_by_id("ABC").clear() does not work!
+            self.driver.find_element_by_id('ucpe_wizard_tacacs_key').send_keys(Keys.CONTROL + "a")
+            self.driver.find_element_by_id('ucpe_wizard_tacacs_key').send_keys(Keys.DELETE)
+
+            self.driver.find_element_by_id('ucpe_wizard_tacacs_server').send_keys(Keys.CONTROL + "a")
+            self.driver.find_element_by_id('ucpe_wizard_tacacs_server').send_keys(Keys.DELETE)
+        else:
+            Select(self.driver.find_element_by_id("ucpe_wizard_auth_type")).select_by_visible_text('Tacacs')
+            self.driver.find_element_by_id('ucpe_wizard_tacacs_server').send_keys(get_value(ucpe, 'tacacs_server'))
+            self.driver.find_element_by_id('ucpe_wizard_tacacs_key').send_keys(get_value(ucpe, 'tacacs_key'))
+        whitelist_enabled = self.driver.find_element_by_id("ucpe_wizard_enable_cli_whitelist_checkbox").is_selected()
+        if get_value(ucpe, 'access_source_enabled') and not whitelist_enabled:
+            self.driver.find_element_by_id("ucpe_wizard_enable_cli_whitelist_checkbox").click()
+            whitelist_enabled = True
+        if whitelist_enabled:
+            self.driver.find_element_by_id("ucpe_wizard_security_whitelist").click()
+            self.driver.find_element_by_id("ucpe_wizard_security_whitelist").clear()
+            self.driver.find_element_by_id("ucpe_wizard_security_whitelist").send_keys(
+                get_value(ucpe, 'access_source_ip_list_string'))
+
+        if not get_value(ucpe, 'access_source_enabled') and whitelist_enabled:
+            self.driver.find_element_by_id("ucpe_wizard_enable_cli_whitelist_checkbox").click()
+
+        # tab 2 - Time
+        self.driver.find_element_by_id("ucpe_wizard_time_server").click()
+        self.driver.find_element_by_id("ucpe_wizard_time_server").clear()
+        if get_value(ucpe, 'time_zone') is not None:
+            self.driver.find_element_by_id("ucpe_wizard_time_server").send_keys(get_value(ucpe, 'time_server'))
+        else:
+            self.driver.find_element_by_id("ucpe_wizard_time_server").send_keys(
+                get_value(ucpe, 'time_server')[0]['name'])
+
+        # Select(self.driver.find_element_by_name("select2-select-container")).select_by_visible_text(get_value(ucpe, 'time_zone'))
+
+        # Time Zone
+        if get_value(ucpe, 'time_zone') is not None:
+            self.driver.find_element_by_id("select2-select-container").click()
+            self.driver.find_element_by_class_name("select2-search__field").send_keys(get_value(ucpe, 'time_zone'))
+            #        self.driver.find_element_by_class_name("select2-search__field").click()
+            self.driver.find_element_by_class_name("select2-search__field").send_keys(Keys.ENTER)
+
+        # tab 3
+        self.driver.find_element_by_xpath("//input[@value='Next']").click()
+        # tab 3 - Syslog
+        for syslog in get_value(ucpe, 'syslog'):
+            id = syslog['id']
+            self.driver.find_element_by_link_text("Remote Server {}".format(id)).click()
+            syslog_enable = self.driver.find_element_by_name("remote{}Enable".format(id)).is_selected()
+            if not syslog_enable and syslog['enable']:
+                self.driver.find_element_by_name("remote{}Enable".format(id)).click()
+                syslog_enable = True
+            if syslog_enable:
+                self.driver.find_element_by_link_text("Remote Server {}".format(id)).click()
+                self.driver.find_element_by_name("remote{}Address".format(id)).click()
+                self.driver.find_element_by_name("remote{}Address".format(id)).clear()
+                self.driver.find_element_by_name("remote{}Address".format(id)).send_keys(syslog['ipv4-address'])
+                Select(self.driver.find_element_by_name("remote{}Facility".format(id))).select_by_visible_text(
+                    syslog['facility'])
+                self.driver.find_element_by_name("remote{}Port".format(id)).click()
+                self.driver.find_element_by_name("remote{}Port".format(id)).clear()
+                self.driver.find_element_by_name("remote{}Port".format(id)).send_keys(syslog['port'])
+                Select(self.driver.find_element_by_name("remote{}Sevirity".format(id))).select_by_visible_text(
+                    syslog['severity'])
+
+        # tab 3 - Snmp
+        snmp_enable = self.driver.find_element_by_id("snmp_server_enable_checkbox").is_selected()
+        if not get_value(ucpe, 'snmp_server.enable') and snmp_enable:
+            self.driver.find_element_by_id("snmp_server_enable_checkbox").click()
+            snmp_enable = False
+
+        if get_value(ucpe, 'snmp_server.enable') and not snmp_enable:
+            self.driver.find_element_by_id("snmp_server_enable_checkbox").click()
+            snmp_enable = True
+
+        if snmp_enable:
+            self.driver.find_element_by_id("snmp_address").click()
+            self.driver.find_element_by_id("snmp_address").clear()
+            self.driver.find_element_by_id("snmp_address").send_keys(get_value(ucpe, 'snmp_server.bind-address'))
+            self.driver.find_element_by_id("snmp_port").click()
+            self.driver.find_element_by_id("snmp_port").clear()
+            self.driver.find_element_by_id("snmp_port").send_keys(get_value(ucpe, 'snmp_server.port'))
+            auth_trap = self.driver.find_element_by_id(
+                "snmp_address_authentication_failure_trap_enabled_checkbox").is_selected()
+            if get_value(ucpe, 'snmp_server.authentication-failure-trap-enabled') and not auth_trap:
+                self.driver.find_element_by_id("snmp_address_authentication_failure_trap_enabled_checkbox").click()
+            self.driver.find_element_by_id("snmp_system_name").click()
+            self.driver.find_element_by_id("snmp_system_name").clear()
+            self.driver.find_element_by_id("snmp_system_name").send_keys(get_value(ucpe, 'snmp_server.system-name'))
+            self.driver.find_element_by_id("snmp_system_location").click()
+            self.driver.find_element_by_id("snmp_system_location").clear()
+            self.driver.find_element_by_id("snmp_system_location").send_keys(
+                get_value(ucpe, 'snmp_server.system-location'))
+            self.driver.find_element_by_id("snmp_system_contact").click()
+            self.driver.find_element_by_id("snmp_system_contact").clear()
+            self.driver.find_element_by_id("snmp_system_contact").send_keys(
+                get_value(ucpe, 'snmp_server.system-contact'))
+            self.driver.find_element_by_id("snmp_system_description").click()
+            self.driver.find_element_by_id("snmp_system_description").clear()
+            self.driver.find_element_by_id("snmp_system_description").send_keys(
+                get_value(ucpe, 'snmp_server.system-description'))
+
+            for view in get_value(ucpe, 'snmp_server.views'):
+                id = view['id']
+                self.driver.find_element_by_xpath("//a[contains(text(),'View {}')]".format(id)).click()
+                self.driver.find_element_by_name("views{}Name".format(id)).click()
+                self.driver.find_element_by_name("views{}Name".format(id)).clear()
+                self.driver.find_element_by_name("views{}Name".format(id)).send_keys(view['name'])
+                Select(self.driver.find_element_by_name("views{}Type".format(id))).select_by_visible_text(view['type'])
+                self.driver.find_element_by_name("views{}oid".format(id)).click()
+                self.driver.find_element_by_name("views{}oid".format(id)).clear()
+                self.driver.find_element_by_name("views{}oid".format(id)).send_keys(view['oid'])
+
+            for user in get_value(ucpe, 'snmp_server.users'):
+                id = user['id']
+                self.driver.find_element_by_xpath("//a[contains(text(),'User {}')]".format(id)).click()
+                self.driver.find_element_by_name("users{}userName".format(id)).click()
+                self.driver.find_element_by_name("users{}userName".format(id)).clear()
+                self.driver.find_element_by_name("users{}userName".format(id)).send_keys(user['user-name'])
+                Select(self.driver.find_element_by_name("users{}MessageModel".format(id))).select_by_visible_text(
+                    user['message-model'])
+                Select(self.driver.find_element_by_name("users{}SecurityLevel".format(id))).select_by_visible_text(
+                    user['security-level'])
+                Select(self.driver.find_element_by_name("users{}AuthType".format(id))).select_by_visible_text(
+                    user['auth-type'])
+                self.driver.find_element_by_name("users{}password".format(id)).click()
+                self.driver.find_element_by_name("users{}password".format(id)).clear()
+                self.driver.find_element_by_name("users{}password".format(id)).send_keys(user['auth-password'])
+                if id == 1:  # GUI BUG
+                    Select(self.driver.find_element_by_name("user12PrivacyType".format(id))).select_by_visible_text(
+                        user['priv-type'])
+                else:
+                    Select(self.driver.find_element_by_name("users{}PrivacyType".format(id))).select_by_visible_text(
+                        user['priv-type'])
+                self.driver.find_element_by_name("users{}PrivacyPass".format(id)).click()
+                self.driver.find_element_by_name("users{}PrivacyPass".format(id)).clear()
+                self.driver.find_element_by_name("users{}PrivacyPass".format(id)).send_keys(user['priv-password'])
+                self.driver.find_element_by_name("users{}RemoteEngineID".format(id)).click()
+                self.driver.find_element_by_name("users{}RemoteEngineID".format(id)).clear()
+                self.driver.find_element_by_name("users{}RemoteEngineID".format(id)).send_keys(user['remote-engine-id'])
+                self.driver.find_element_by_name("users{}ReadView".format(id)).click()
+                self.driver.find_element_by_name("users{}ReadView".format(id)).clear()
+                self.driver.find_element_by_name("users{}ReadView".format(id)).send_keys(user['read-view'])
+                self.driver.find_element_by_name("users{}WriteView".format(id)).click()
+                self.driver.find_element_by_name("users{}WriteView".format(id)).clear()
+                self.driver.find_element_by_name("users{}WriteView".format(id)).send_keys(user['write-view'])
+                self.driver.find_element_by_name("users{}NotifyView".format(id)).click()
+                self.driver.find_element_by_name("users{}NotifyView".format(id)).clear()
+                self.driver.find_element_by_name("users{}NotifyView".format(id)).send_keys(user['notify-view'])
+
+            for target in get_value(ucpe, 'snmp_server.target-address'):
+                id = target['id']
+                self.driver.find_element_by_xpath(
+                    "//a[contains(text(),'Target Address {}')]".format(id)).click()
+                target_enable = self.driver.find_element_by_id("target_address_enable_checkbox").is_selected()
+                if target['enable'] and not target_enable:
+                    self.driver.find_element_by_id("target_address_enable_checkbox").click()
+                    target_enable = True
+                if target_enable:
+                    Select(self.driver.find_element_by_id("target_address_message_model")).select_by_visible_text(
+                        target['message-model'])
+                    Select(self.driver.find_element_by_id("target_address_security_level")).select_by_visible_text(
+                        target['security-level'])
+                    self.driver.find_element_by_id("target_address_ipv4").click()
+                    self.driver.find_element_by_id("target_address_ipv4").clear()
+                    self.driver.find_element_by_id("target_address_ipv4").send_keys(target['ipv4-address'])
+                    self.driver.find_element_by_id("target_address_security_name").click()
+                    self.driver.find_element_by_id("target_address_security_name").clear()
+                    self.driver.find_element_by_id("target_address_security_name").send_keys(target['security-name'])
+                    self.driver.find_element_by_id("target_address_destination_port").click()
+                    self.driver.find_element_by_id("target_address_destination_port").clear()
+                    self.driver.find_element_by_id("target_address_destination_port").send_keys(target['dst-port'])
+                    self.driver.find_element_by_id("target_address_retry_count").click()
+                    self.driver.find_element_by_id("target_address_retry_count").clear()
+                    self.driver.find_element_by_id("target_address_retry_count").send_keys(target['retry-count'])
+                    Select(self.driver.find_element_by_id("target_address_type")).select_by_visible_text(target['type'])
+
+    def add_ucpe(self, ucpe={}, ucpe_template=None, vnf_name=None, vnf_description=None, vnfd_name=None,
+                 vnf_params=None, wait_ztp=False):
+        self.select_menu('uCPE Management/uCPEs')
+        self.driver.find_element_by_id("btn_add_new").click()
+        try:
+            # Check if there is template dialog
+            if ucpe_template:
+                self.driver.find_element_by_xpath(".//*[contains(text(), template)]").click()
+            else:
+                self.driver.find_element_by_xpath(".//*[contains(text(), 'Blank Template')]").click()
+            self.waited_element_click(xpath=".//button[contains(text(), 'Select')]", timeout_sec=2,
+                                      with_error_check=True)
+        except:
+            pass
+        self._fill_ucpe_data(ucpe, vnf_name, vnf_description, vnfd_name, vnf_params)
+        self.waited_element_click(xpath="//input[@value='Create']", timeout_sec=5, with_error_check=True)
+
+        if not wait_ztp:
+            return
+        id = self.inventory.get_ucpe_id_by_hostname(get_value(ucpe, 'hostname'))
+        # Wait initial Unreachable to complete
+        for i in range(0, 10):
+            time.sleep(10)
+            data = self.inventory.get_ucpe_detail_by_id(id)
+            if data['operStatus'] != 'Unreachable':
+                break
+            elif i == 10:
+                raise Exception("Timeout the device is Unreachable.")
+        # Wait ZTP to complete
+        for i in range(0, 120):
+            time.sleep(10)
+            data = self.inventory.get_ucpe_detail_by_id(id)
+            if data['operStatus'] != 'ZTP in progress':
+                return
+        raise Exception('Timeout while waiting device to be ready for service!')
+
+    def modify_ucpe(self, ucpe={}, ucpe_template=None, vnf_name=None, vnf_description=None, vnfd_name=None,
+                    vnf_params=None, save_and_apply=True):
+        # Wait ZTP to complete
+        id = self.inventory.get_ucpe_id_by_hostname(get_value(ucpe, 'hostname'))
+        for i in range(0, 120):
+            data = self.inventory.get_ucpe_detail_by_id(id)
+            if data['operStatus'] != 'ZTP in progress':
+                break
+            time.sleep(5)
+        if i == 199:
+            raise Exception('Timeout while waiting device to exit ZTP!')
+
+        self.select_menu('uCPE Management/uCPEs')
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(ucpe['hostname'])
+        self.driver.find_element_by_id("filter_btn_ucpe").click()
+        self.waited_element_click(link_text="Hostname", timeout_sec=2, with_error_check=True)
+        time.sleep(2)
+        table = self.driver.find_elements_by_xpath('//*[@id="ucpes_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('uCPE not found!')
+        table[0].click()
+        time.sleep(1)
+        self.driver.find_element_by_id('btn_edit').click()
+        self._fill_ucpe_data(ucpe, vnf_name, vnf_description, vnfd_name, vnf_params,
+                             local_controller_username=ucpe['openstack_username'],
+                             local_controller_password=ucpe['openstack_password'])
+        if save_and_apply:
+            self.driver.find_element_by_id("ucpe_wizard_save_and_apply_btn").click()
+        else:
+            self.driver.find_element_by_id("ucpe_wizard_save_btn").click()
+            return
+
+        # Wait ZTP to complete
+        time.sleep(10)
+        id = self.inventory.get_ucpe_id_by_hostname(get_value(ucpe, 'hostname'))
+        for i in range(0, 120):
+            data = self.inventory.get_ucpe_detail_by_id(id)
+            if data['operStatus'] == 'Ready for Service':
+                return data
+            time.sleep(5)
+        raise Exception('Timeout while waiting device to be ready for service!')
+
+    def delete_ucpe(self, serial_number):
+        self.select_menu('uCPE Management/uCPEs')
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(serial_number)
+        self.driver.find_element_by_id("filter_btn_ucpe").click()
+        self.waited_element_click(link_text="Serial Number", timeout_sec=2, with_error_check=True)
+        time.sleep(2)
+        table = self.driver.find_elements_by_xpath('//*[@id="ucpes_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('uCPE not found!')
+        table[0].click()
+        time.sleep(1)
+        self.driver.find_element_by_id("btn_delete").click()
+        self.waited_element_click(xpath=".//button[contains(text(), 'Yes')]", timeout_sec=10, with_error_check=True)
+
+    def reboot_ucpe(self, serial_number):
+        self.select_menu('uCPE Management/uCPEs')
+        self.driver.find_element_by_xpath(
+            "(.//*[normalize-space(text()) and normalize-space(.)='Site'])[1]/following::div[1]").click()
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(serial_number)
+        self.driver.find_element_by_link_text("Serial Number").click()
+        time.sleep(2)
+        table = self.driver.find_elements_by_xpath('//*[@id="ucpes_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('uCPE not found!')
+        table[0].click()
+        time.sleep(1)
+        # TODO: Replace action!
+        raise Exception("TODO: Replace action!")
+        # self.driver.find_element_by_id('btn_edit').click()
+        # self.driver.find_element_by_link_text("Reboot").click()
+        self.waited_element_click(
+            xpath="(.//*[normalize-space(text()) and normalize-space(.)='Confirmation'])[1]/following::button[1]",
+            timeout_sec=5, with_error_check=True)
+
+    def ucpe_generate_auth_key(self, serial_number):
+        self.select_menu('uCPE Management/uCPEs')
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(serial_number)
+        self.driver.find_element_by_id("filter_btn_ucpe").click()
+        self.waited_element_click(link_text="Serial Number", timeout_sec=2, with_error_check=True)
+        time.sleep(2)
+        table = self.driver.find_elements_by_xpath('//*[@id="ucpes_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('uCPE not found!')
+        table[0].click()
+        time.sleep(1)
+        self.driver.find_element_by_id("btn_actions").click()
+        self.driver.find_element_by_xpath(
+            "//div[@id='pageWrapper']/app-ucpes/app-top-header/div/div/div[5]/ul/li[5]/input").click()
+        self.waited_element_click(xpath=".//button[contains(text(), 'Yes')]", timeout_sec=10, with_error_check=True)
+
+    def add_ucpe_template(self, name, ucpe={}, customer=None, service=None, site=None):
+        self.select_menu('uCPE Management/uCPE Templates')
+        self.driver.find_element_by_css_selector("input[value='Add New'][type='button']").click()
+        self._fill_ucpe_data(ucpe, customer, service, site, is_template=True)
+        self.driver.find_element_by_xpath(
+            "(.//*[normalize-space(text()) and normalize-space(.)='New uCPE Template'])[1]/following::button[1]").click()
+        self.driver.find_element_by_xpath(
+            "(.//*[normalize-space(text()) and normalize-space(.)='Name'])[1]/following::input[1]").click()
+        self.driver.find_element_by_xpath(
+            "(.//*[normalize-space(text()) and normalize-space(.)='Name'])[1]/following::input[1]").clear()
+        self.driver.find_element_by_xpath(
+            "(.//*[normalize-space(text()) and normalize-space(.)='Name'])[1]/following::input[1]").send_keys(name)
+        self.waited_element_click(
+            xpath="(.//*[normalize-space(text()) and normalize-space(.)='Name'])[1]/following::button[1]",
+            timeout_sec=2, with_error_check=True)
+
+    def delete_ucpe_template(self, name):
+        self.select_menu('uCPE Management/uCPE Templates')
+        page = 1
+        while True:
+            if page > 1:
+                self.driver.find_element_by_link_text("{}".format(page)).click()
+            time.sleep(2)  # wait the table to load
+            for row in self.driver.find_elements_by_xpath("//*/tbody/*"):
+                td = row.find_elements_by_xpath(".//*")
+                if td[2].text == name:
+                    td[1].click()
+                    self.driver.find_element_by_xpath(
+                        "(.//*[normalize-space(text()) and normalize-space(.)='uCPE Templates'])[2]/following::input[2]").click()
+                    self.waited_element_click(
+                        xpath="(.//*[normalize-space(text()) and normalize-space(.)='Confirmation'])[1]/following::button[2]",
+                        timeout_sec=2, with_error_check=True)
+                    return
+            page += 1
+
+    def add_user(self, name='', description='', email='', password='', role=''):
+        self.select_menu('User Management/Users')
+        self.driver.find_element_by_xpath(
+            "(.//*[normalize-space(text()) and normalize-space(.)='Controllers'])[1]/following::span[1]").click()
+        self.driver.find_element_by_link_text("Users").click()
+        self.driver.find_element_by_xpath(
+            "(.//*[normalize-space(text()) and normalize-space(.)='Users'])[2]/following::input[1]").click()
+        self.driver.find_element_by_name("userName").click()
+        self.driver.find_element_by_name("userName").clear()
+        self.driver.find_element_by_name("userName").send_keys(name)
+        self.driver.find_element_by_name("userDescription").click()
+        self.driver.find_element_by_name("userDescription").clear()
+        self.driver.find_element_by_name("userDescription").send_keys(description)
+        self.driver.find_element_by_name("userEmail").click()
+        self.driver.find_element_by_name("userEmail").clear()
+        self.driver.find_element_by_name("userEmail").send_keys(email)
+        self.driver.find_element_by_name("pass").click()
+        self.driver.find_element_by_name("pass").clear()
+        self.driver.find_element_by_name("pass").send_keys(password)
+        if role != '':
+            Select(self.driver.find_element_by_name("selectRole")).select_by_visible_text(role)
+            self.driver.find_element_by_name("selectRole").click()
+        self.driver.find_element_by_xpath(
+            "(.//*[normalize-space(text()) and normalize-space(.)='New User'])[1]/following::input[1]").click()
+        self.waited_element_click(
+            xpath="(.//*[normalize-space(text()) and normalize-space(.)='Controllers'])[1]/following::span[1]",
+            timeout_sec=2, with_error_check=True)
+
+    def delete_user(self, name=""):
+        self.select_menu('User Management/Users')
+        user_id = self.inventory.get_user_id_by_name(name)
+        self.driver.find_element_by_id("checkbox{}".format(user_id)).click()
+        self.driver.find_element_by_xpath(
+            "(.//*[normalize-space(text()) and normalize-space(.)='Users'])[2]/following::input[2]").click()
+        self.driver.find_element_by_xpath(
+            "(.//*[normalize-space(text()) and normalize-space(.)='Confirmation'])[1]/following::button[2]").click()
+        time.sleep(2)
+
+    def add_role(self, name='', description=''):
+        self.select_menu("User Management/Roles")
+        self.driver.find_element_by_xpath(
+            "(.//*[normalize-space(text()) and normalize-space(.)='Controllers'])[1]/following::span[1]").click()
+        self.driver.find_element_by_link_text("Roles").click()
+        self.driver.find_element_by_xpath(
+            "(.//*[normalize-space(text()) and normalize-space(.)='Roles'])[2]/following::input[1]").click()
+        self.driver.find_element_by_name("roleName").clear()
+        self.driver.find_element_by_name("roleName").send_keys(name)
+        self.driver.find_element_by_name("roleDescription").clear()
+        self.driver.find_element_by_name("roleDescription").send_keys(description)
+        self.driver.find_element_by_xpath(
+            "(.//*[normalize-space(text()) and normalize-space(.)='New Role'])[1]/following::input[1]").click()
+        self.waited_element_click(
+            xpath="(.//*[normalize-space(text()) and normalize-space(.)='Controllers'])[1]/following::span[1]",
+            timeout_sec=2, with_error_check=True)
+
+    def delete_role(self, name=""):
+        self.select_menu("User Management/Roles")
+        role_id = self.inventory.get_role_id_by_name(name)
+        self.driver.find_element_by_id("checkbox{}".format(role_id)).click()
+        self.driver.find_element_by_xpath(
+            "(.//*[normalize-space(text()) and normalize-space(.)='Roles'])[2]/following::input[2]").click()
+        self.driver.find_element_by_xpath(
+            "(.//*[normalize-space(text()) and normalize-space(.)='Confirmation'])[1]/following::button[2]").click()
+        time.sleep(2)
+
+    def add_backup_storage(self, name='', folder='', ssh_host='', ssh_user_name='', password='',
+                           local_storage=True, ssh=False):
+        self.select_menu("Backup & Restore/Backup Storage Settings")
+        self.driver.find_element_by_id("btn_add_new").click()
+        self.driver.find_element_by_id("storage_setting_name").click()
+        self.driver.find_element_by_id("storage_setting_name").clear()
+        self.driver.find_element_by_id("storage_setting_name").send_keys(name)
+        self.driver.find_element_by_id("storage_setting_backup_folder").clear()
+        self.driver.find_element_by_id("storage_setting_backup_folder").send_keys(folder)
+
+        if local_storage:
+            Select(self.driver.find_element_by_id("storage_setting_storage_type")).select_by_visible_text("Local")
+            self.driver.find_element_by_id("storage_setting_storage_type").click()
+            self.driver.find_element_by_id("btn_save").click()
+            return
+
+        Select(self.driver.find_element_by_id("storage_setting_storage_type")).select_by_visible_text("SSH")
+        self.driver.find_element_by_id("storage_setting_storage_type").click()
+        self.driver.find_element_by_id("storage_setting_ssh_host").click()
+        self.driver.find_element_by_id("storage_setting_ssh_host").clear()
+        self.driver.find_element_by_id("storage_setting_ssh_host").send_keys(ssh_host)
+        self.driver.find_element_by_id("storage_setting_ssh_user_name").clear()
+        self.driver.find_element_by_id("storage_setting_ssh_user_name").send_keys(ssh_user_name)
+
+        if password != '':
+            self.driver.find_element_by_id("storage_setting_ssh_password").click()
+            self.driver.find_element_by_id("storage_setting_ssh_password").clear()
+            self.driver.find_element_by_id("storage_setting_ssh_password").send_keys(password)
+
+        self.driver.find_element_by_id("btn_save").click()
+        time.sleep(2)
+
+    def delete_backup_storage(self, name=""):
+        self.select_menu("Backup & Restore/Backup Storage Settings")
+        for row in self.driver.find_elements_by_xpath("//*/tbody/*"):
+            td = row.find_elements_by_xpath(".//*")
+            if td[0].text == name:
+                row.click()
+                break
+        self.driver.find_element_by_id("btn_delete").click()
+        self.waited_element_click(
+            xpath="(.//*[normalize-space(text()) and normalize-space(.)='Confirmation'])[1]/following::button[1]",
+            timeout_sec=5, with_error_check=True)
+
+    def add_backup_template(self, name='', storage='', hh='', mm='', meridium='', schedule_off=True, daily=False,
+                            weekly_on=False, weekly_day='',
+                            every_6_hours=False):
+
+        self.select_menu("Backup & Restore/Backup Templates")
+
+        self.driver.find_element_by_id("btn_add_new").click()
+        self.driver.find_element_by_id("backup_template_name").click()
+        self.driver.find_element_by_id("backup_template_name").clear()
+        self.driver.find_element_by_id("backup_template_name").send_keys(name)
+        Select(self.driver.find_element_by_id("backup_template_storage_settings")).select_by_visible_text(storage)
+        self.driver.find_element_by_id("backup_template_storage_settings").click()
+
+        if schedule_off:
+            self.driver.find_element_by_id("scheduler_off_radio").click()
+            self.driver.find_element_by_id("btn_save").click()
+            return
+
+        if daily:
+
+            self.driver.find_element_by_xpath(
+                "(.//*[normalize-space(text()) and normalize-space(.)='Increment hours'])[1]/following::button[1]").click()
+
+            self.driver.find_element_by_xpath(
+                "(.//*[normalize-space(text()) and normalize-space(.)='Increment hours'])[1]/following::input[1]").clear()
+
+            self.driver.find_element_by_xpath(
+                "(.//*[normalize-space(text()) and normalize-space(.)='Increment hours'])[1]/following::input[1]").send_keys(
+                hh)
+            self.driver.find_element_by_xpath(
+                "(.//*[normalize-space(text()) and normalize-space(.)='Increment minutes'])[1]/following::input[1]").click()
+            self.driver.find_element_by_xpath(
+                "(.//*[normalize-space(text()) and normalize-space(.)='Increment minutes'])[1]/following::input[1]").clear()
+            self.driver.find_element_by_xpath(
+                "(.//*[normalize-space(text()) and normalize-space(.)='Increment minutes'])[1]/following::input[1]").send_keys(
+                mm)
+
+            if meridium == 'PM':
+                self.driver.find_element_by_xpath(
+                    "(.//*[normalize-space(text()) and normalize-space(.)='Decrement minutes'])[1]/following::button[1]").click()
+
+            self.driver.find_element_by_id("btn_save").click()
+            return
+
+        if weekly_on:
+
+            self.driver.find_element_by_id("scheduler_weekly_radio").click()
+            self.driver.find_element_by_id("scheduler_weekly_day").click()
+            Select(self.driver.find_element_by_id("scheduler_weekly_day")).select_by_visible_text(weekly_day)
+
+            self.driver.find_element_by_xpath(
+                "(.//*[normalize-space(text()) and normalize-space(.)='Increment hours'])[1]/following::button[1]").click()
+
+            self.driver.find_element_by_xpath(
+                "(.//*[normalize-space(text()) and normalize-space(.)='Increment hours'])[1]/following::input[1]").clear()
+
+            self.driver.find_element_by_xpath(
+                "(.//*[normalize-space(text()) and normalize-space(.)='Increment hours'])[1]/following::input[1]").send_keys(
+                hh)
+
+            self.driver.find_element_by_xpath(
+                "(.//*[normalize-space(text()) and normalize-space(.)='Increment minutes'])[1]/following::input[1]").click()
+            self.driver.find_element_by_xpath(
+                "(.//*[normalize-space(text()) and normalize-space(.)='Increment minutes'])[1]/following::input[1]").clear()
+            self.driver.find_element_by_xpath(
+                "(.//*[normalize-space(text()) and normalize-space(.)='Increment minutes'])[1]/following::input[1]").send_keys(
+                mm)
+
+            if meridium == 'PM':
+                self.driver.find_element_by_xpath(
+                    "(.//*[normalize-space(text()) and normalize-space(.)='Decrement minutes'])[1]/following::button[1]").click()
+
+            self.driver.find_element_by_id("btn_save").click()
+            return
+
+        if every_6_hours:
+
+            self.driver.find_element_by_xpath(
+                "//div[@id='pageWrapper']/app-backup-template/div/div[2]/div/div[7]/label").click()
+
+            self.driver.find_element_by_xpath(
+                "(.//*[normalize-space(text()) and normalize-space(.)='Increment hours'])[1]/following::button[1]").click()
+
+            self.driver.find_element_by_xpath(
+                "(.//*[normalize-space(text()) and normalize-space(.)='Increment hours'])[1]/following::input[1]").clear()
+
+            self.driver.find_element_by_xpath(
+                "(.//*[normalize-space(text()) and normalize-space(.)='Increment hours'])[1]/following::input[1]").send_keys(
+                hh)
+            self.driver.find_element_by_xpath(
+                "(.//*[normalize-space(text()) and normalize-space(.)='Increment minutes'])[1]/following::input[1]").click()
+            self.driver.find_element_by_xpath(
+                "(.//*[normalize-space(text()) and normalize-space(.)='Increment minutes'])[1]/following::input[1]").clear()
+            self.driver.find_element_by_xpath(
+                "(.//*[normalize-space(text()) and normalize-space(.)='Increment minutes'])[1]/following::input[1]").send_keys(
+                mm)
+
+            if meridium == 'PM':
+                self.driver.find_element_by_xpath(
+                    "(.//*[normalize-space(text()) and normalize-space(.)='Decrement minutes'])[1]/following::button[1]").click()
+
+            self.driver.find_element_by_id("btn_save").click()
+            time.sleep(2)
+            return
+
+    def delete_backup_template(self, name=''):
+        self.select_menu("Backup & Restore/Backup Templates")
+        for row in self.driver.find_elements_by_xpath("//*/tbody/*"):
+            td = row.find_elements_by_xpath(".//*")
+            if td[0].text == name:
+                row.click()
+                break
+        self.driver.find_element_by_id("btn_delete").click()
+        self.waited_element_click(
+            xpath="(.//*[normalize-space(text()) and normalize-space(.)='Confirmation'])[1]/following::button[1]",
+            timeout_sec=5, with_error_check=True)
+
+    def attach_backup_template_to_ucpe(self, template_name, ucpe_serial_number):
+        self.select_menu("Backup & Restore/Backups")
+        self.driver.find_element_by_xpath(
+            "(.//*[normalize-space(text()) and normalize-space(.)='Site'])[1]/following::div[1]").click()
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(ucpe_serial_number)
+        self.driver.find_element_by_link_text("Serial Number").click()
+        time.sleep(2)
+        table = self.driver.find_elements_by_xpath('//*[@id="ucpes_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('uCPE not found!')
+        table[0].click()
+        time.sleep(1)
+        self.driver.find_element_by_id('backups_attach_to_template').click()
+        time.sleep(2)
+        for row in self.driver.find_elements_by_xpath("//*/tbody/*"):
+            td = row.find_elements_by_xpath(".//*")
+            if td[0].text == template_name:
+                td[0].click()
+                break
+        self.waited_element_click(xpath="//button[text()='Submit']", timeout_sec=10, with_error_check=True)
+
+    def detach_backup_template_from_ucpe(self, ucpe_serial_number):
+        self.select_menu("Backup & Restore/Backups")
+        self.driver.find_element_by_xpath(
+            "(.//*[normalize-space(text()) and normalize-space(.)='Site'])[1]/following::div[1]").click()
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(ucpe_serial_number)
+        self.driver.find_element_by_link_text("Serial Number").click()
+        time.sleep(2)
+        table = self.driver.find_elements_by_xpath('//*[@id="ucpes_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('uCPE not found!')
+        table[0].click()
+        time.sleep(1)
+        self.waited_element_click(id='backups_detach_from_template', timeout_sec=10, with_error_check=True)
+
+    def run_manual_backup(self, template_name, ucpe_serial_number):
+        self.select_menu("Backup & Restore/Backups")
+        time.sleep(2)
+        self.driver.find_element_by_xpath(
+            "(.//*[normalize-space(text()) and normalize-space(.)='Site'])[1]/following::div[1]").click()
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(ucpe_serial_number)
+        self.driver.find_element_by_link_text("Serial Number").click()
+        time.sleep(2)
+        table = self.driver.find_elements_by_xpath('//*[@id="ucpes_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('uCPE not found!')
+        table[0].click()
+        time.sleep(1)
+        self.driver.find_element_by_id('backups_run_backup').click()
+        self.waited_element_click(
+            xpath="(.//*[normalize-space(text()) and normalize-space(.)='Confirmation'])[1]/following::button[1]")
+        time.sleep(30)  # Wait the ugly backup to start
+        table[0].click()
+
+    def get_last_backup_status(self, ucpe_serial_number, backup_storage, no_filter=False):
+        if not no_filter:
+            self.select_menu("Backup & Restore/Backups")
+            time.sleep(2)
+            self.driver.find_element_by_xpath(
+                "(.//*[normalize-space(text()) and normalize-space(.)='Site'])[1]/following::div[1]").click()
+            self.driver.find_element_by_id("mainSearchBox").click()
+            self.driver.find_element_by_id("mainSearchBox").clear()
+            self.driver.find_element_by_id("mainSearchBox").send_keys(ucpe_serial_number)
+            self.driver.find_element_by_link_text("Serial Number").click()
+            time.sleep(2)
+        table = self.driver.find_elements_by_xpath('//*[@id="ucpes_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('uCPE not found!')
+        table[0].click()
+        time.sleep(1)
+        self.driver.find_element_by_id('btn_backups').click()
+        time.sleep(1)
+        last_status = 'UNKNOWN'
+        for row in self.driver.find_elements_by_xpath('//*[@id="backup_history_table"]/tbody/tr'):
+            cols = row.find_elements(By.TAG_NAME, "td")
+            if cols[5].text == backup_storage:
+                last_status = cols[4].text
+        return last_status
+
+    def run_manual_restore(self, ucpe_serial_number, backup_storage):
+        self.select_menu("Backup & Restore/Backups")
+        self.driver.find_element_by_xpath(
+            "(.//*[normalize-space(text()) and normalize-space(.)='Site'])[1]/following::div[1]").click()
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(ucpe_serial_number)
+        self.driver.find_element_by_link_text("Serial Number").click()
+        time.sleep(2)
+        table = self.driver.find_elements_by_xpath('//*[@id="ucpes_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('uCPE not found!')
+        table[0].click()
+        time.sleep(1)
+        self.driver.find_element_by_id('btn_backups').click()
+        time.sleep(1)
+        last_row = None
+        for row in self.driver.find_elements_by_xpath('//*[@id="backup_history_table"]/tbody/tr'):
+            cols = row.find_elements(By.TAG_NAME, "td")
+            if cols[5].text == backup_storage and cols[4].text == 'SUCCESS':
+                last_row = row
+        if not last_row:
+            raise Exception('There is no backup to be restored!')
+        last_row.click()
+        self.driver.find_element_by_id('btn_actions').click()
+        self.driver.find_element_by_id("Restore_action_id").click()
+        self.waited_element_click(
+            xpath="(.//*[normalize-space(text()) and normalize-space(.)='Confirmation'])[1]/following::button[1]",
+            timeout_sec=10, with_error_check=True)
+
+    def delete_last_backup(self, ucpe_serial_number, backup_storage):
+        self.select_menu("Backup & Restore/Backups")
+        self.driver.find_element_by_xpath(
+            "(.//*[normalize-space(text()) and normalize-space(.)='Site'])[1]/following::div[1]").click()
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(ucpe_serial_number)
+        self.driver.find_element_by_link_text("Serial Number").click()
+        time.sleep(2)
+        table = self.driver.find_elements_by_xpath('//*[@id="ucpes_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('uCPE not found!')
+        table[0].click()
+        time.sleep(1)
+        self.driver.find_element_by_id('btn_backups').click()
+        time.sleep(1)
+        last_row = None
+        for row in self.driver.find_elements_by_xpath('//*[@id="backup_history_table"]/tbody/tr'):
+            cols = row.find_elements(By.TAG_NAME, "td")
+            if cols[5].text == backup_storage:
+                last_row = row
+        if not last_row:
+            return False
+        last_row.click()
+        self.driver.find_element_by_id('btn_actions').click()
+        self.driver.find_element_by_id("Delete_action_id").click()
+        self.waited_element_click(
+            xpath="(.//*[normalize-space(text()) and normalize-space(.)='Confirmation'])[1]/following::button[1]",
+            timeout_sec=10, with_error_check=True)
+        return True
+
+    def get_last_restore_status(self, ucpe_serial_number, no_filter=False):
+        if not no_filter:
+            self.select_menu("Backup & Restore/Backups")
+            time.sleep(2)
+            self.driver.find_element_by_xpath(
+                "(.//*[normalize-space(text()) and normalize-space(.)='Site'])[1]/following::div[1]").click()
+            self.driver.find_element_by_id("mainSearchBox").click()
+            self.driver.find_element_by_id("mainSearchBox").clear()
+            self.driver.find_element_by_id("mainSearchBox").send_keys(ucpe_serial_number)
+            self.driver.find_element_by_link_text("Serial Number").click()
+            time.sleep(2)
+        table = self.driver.find_elements_by_xpath('//*[@id="ucpes_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('uCPE not found!')
+        table[0].click()
+        time.sleep(1)
+        self.driver.find_element_by_id('btn_restores').click()
+        time.sleep(1)
+        last_status = 'UNKNOWN'
+        for row in self.driver.find_elements_by_xpath('//*[@id="restore_history_table"]/tbody/tr'):
+            cols = row.find_elements(By.TAG_NAME, "td")
+            last_status = cols[4].text
+        return last_status
+
+    def delete_last_restore(self, ucpe_serial_number, storage_name, template_name):
+        self.select_menu("Backup & Restore/Backups")
+        time.sleep(2)
+        self.driver.find_element_by_xpath(
+            "(.//*[normalize-space(text()) and normalize-space(.)='Site'])[1]/following::div[1]").click()
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(ucpe_serial_number)
+        self.driver.find_element_by_link_text("Serial Number").click()
+        time.sleep(2)
+        table = self.driver.find_elements_by_xpath('//*[@id="ucpes_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('uCPE not found!')
+        table[0].click()
+        time.sleep(1)
+        self.driver.find_element_by_id('btn_restores').click()
+        time.sleep(1)
+        rows = self.driver.find_elements_by_xpath('//*[@id="restore_history_table"]/tbody/tr')
+        if len(rows) == 0:
+            return False
+        rows[len(rows) - 1].click()
+        self.driver.find_element_by_id("btn_actions").click()
+        self.driver.find_element_by_xpath(
+            "//div[@id='pageWrapper']/app-backup/app-restore-history/app-top-header/div/div/div/ul/li/input").click()
+        self.driver.find_element_by_xpath(
+            "(.//*[normalize-space(text()) and normalize-space(.)='Confirmation'])[1]/following::button[1]").click()
+        return True
+
+    def add_network_service(self, serial_number, name, description='', template='', params=''):
+        self.select_menu('Services & VNF LCM/Service Management')
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(serial_number)
+        self.driver.find_element_by_id("filter_btn_ucpe").click()
+        self.waited_element_click(link_text="Serial Number", timeout_sec=2, with_error_check=True)
+        time.sleep(2)
+        table = self.driver.find_elements_by_xpath('//*[@id="ucpes_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('uCPE not found!')
+        table[0].click()
+        time.sleep(1)
+        self.driver.find_element_by_id("deploy_ns_btn").click()
+        time.sleep(1)
+        self.driver.find_element_by_id("network_service_name").click()
+        self.driver.find_element_by_id("network_service_name").clear()
+        self.driver.find_element_by_id("network_service_name").send_keys(name)
+        if description:
+            self.driver.find_element_by_id("network_service_description").clear()
+            self.driver.find_element_by_id("network_service_description").send_keys(description)
+        Select(self.driver.find_element_by_id("network_service_descriptor")).select_by_visible_text(template)
+        self.driver.find_element_by_id("network_service_descriptor").click()
+        if params:
+            self.Select(self.driver.find_element_by_id("network_service_params_source")).select_by_visible_text(
+                "Direct Input")
+            self.driver.find_element_by_id("network_service_params_source").click()
+            self.driver.find_element_by_id("network_service_yaml").click()
+            self.driver.find_element_by_id("network_service_yaml").clear()
+            self.driver.find_element_by_id("network_service_yaml").send_keys(params)
+        self.waited_element_click(id="deploy_network_service_submit", timeout_sec=2, with_error_check=True)
+        # Wait service to be created or failed
+        time.sleep(10)
+        status = 'Unknown'
+        for i in range(0, 30):
+            status = self.driver.find_elements_by_xpath('//*[@id="network_services_table"]/tbody/tr/*')[1].text
+            if str(status).find("Pending") == -1:
+                break
+            time.sleep(20)
+        if i == 29:
+            raise Exception('Timeout while waiting service in Pending state!')
+        if str(status).find("Active") == -1:
+            error = self.driver.find_elements_by_xpath('//*[@id="network_services_table"]/tbody/tr/*')[2].text
+            raise Exception(error)
+
+    def delete_network_service(self, serial_number, name):
+        self.select_menu('Services & VNF LCM/Service Management')
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(serial_number)
+        self.driver.find_element_by_id("filter_btn_ucpe").click()
+        self.waited_element_click(link_text="Serial Number", timeout_sec=2, with_error_check=True)
+        time.sleep(2)
+        table = self.driver.find_elements_by_xpath('//*[@id="ucpes_table"]/tbody/tr')
+        if not len(table):
+            raise Exception('uCPE not found!')
+        table[0].click()
+        time.sleep(1)
+        table = self.driver.find_elements_by_xpath('//*[@id="network_services_table"]/tbody/tr')
+        if not len(table):
+            return False
+        table[0].click()
+        time.sleep(1)
+        self.driver.find_element_by_id("btn_actions").click()
+        self.driver.find_element_by_xpath(
+            "//div[@id='pageWrapper']/app-network-services/app-ns-vnfs/app-top-header/div/div/div/ul/li/input").click()
+        self.driver.find_element_by_xpath(
+            "(.//*[normalize-space(text()) and normalize-space(.)='Confirmation'])[1]/following::button[1]").click()
+        for i in range(0, 30):
+            time.sleep(10)
+            ns_data = self.inventory.get_network_service_by_name(name)
+            if ns_data is None:
+                break
+        if i == 29:
+            raise Exception('Timeout while waiting service to be deleted!')
+        return True
+
+    def switch_controller(self, controller_type='external', external_controller='auto-controller',
+                          local_controller_username='admin', local_controller_password='admin'):
+        controller_types = ['local', 'external']
+        if controller_type not in controller_types:
+            raise ValueError("Invalid controller_types. Expected one of: {}".format(controller_types))
+
+        if controller_type is 'local':
+            self.driver.find_element_by_id("controller_type_local_radio").click()
+            self.driver.find_element_by_id("local_controller_username").click()
+            self.driver.find_element_by_id("local_controller_username").clear()
+            self.driver.find_element_by_id("local_controller_username").send_keys(
+                "{}".format(local_controller_username))
+            self.driver.find_element_by_id("local_controller_password").click()
+            self.driver.find_element_by_id("local_controller_password").clear()
+            self.driver.find_element_by_id("local_controller_password").send_keys(
+                "{}".format(local_controller_password))
+            return
+
+        if controller_type is 'external':
+            return
+
+    def _selector_submenu(self, ucpe_serial_number, menu, submenu):
+        self.select_menu(menu)
+        if menu.find('uCPE Manager') == -1:
+            self.driver.find_element_by_id("mainSearchBox").click()
+            self.driver.find_element_by_id("mainSearchBox").clear()
+            self.driver.find_element_by_id("mainSearchBox").send_keys(ucpe_serial_number)
+            self.driver.find_element_by_id("filter_btn_ucpe").click()
+            self.driver.find_element_by_link_text("Serial Number").click()
+            time.sleep(2)
+            table = self.driver.find_elements_by_xpath('//*[@id="ucpes_table"]/tbody/tr')
+            if not len(table):
+                raise Exception('uCPE not found!')
+            table[0].click()
+            time.sleep(1)
+            self.driver.find_element_by_id("btn_diagnostics").click()
+            time.sleep(1)
+        self.driver.find_element_by_id(submenu).click()
+        time.sleep(1)
+
+    def ping_test(self, ucpe_serial_number, ucpe_ip_or_hostname, source, destination,
+                  count, packet_size, fragment, resolve):
+        menu = "Test & Troubleshoot/uCPEs"
+
+        if source == 'control':
+            menu = "Test & Troubleshoot/uCPE Manager"
+
+        submenu = "Ping"
+        self._selector_submenu(ucpe_serial_number, menu, submenu)
+
+        self.driver.find_element_by_id("ping_test_destination").clear()
+        self.driver.find_element_by_id("ping_test_destination").send_keys(destination)
+        Select(self.driver.find_element_by_id("ping_test_source")).select_by_visible_text("{}".format(source))
+        self.driver.find_element_by_id("ping_test_count").clear()
+        self.driver.find_element_by_id("ping_test_count").send_keys(count)
+        self.driver.find_element_by_id("ping_test_packet_size").clear()
+        self.driver.find_element_by_id("ping_test_packet_size").send_keys(packet_size)
+        self.waited_element_click(id="ping_test_run_btn", timeout_sec=10, with_error_check=True)
+        time.sleep(10)  # Wait to complete
+        self.waited_element_click(id="ping_test", timeout_sec=10, with_error_check=True)
+        return self.driver.find_element_by_id("ping_test_response").text
+
+    def traceroute_test(self, ucpe_serial_number, ucpe_ip_or_hostname, source, destination, max_hop, packet_size,
+                        fragment, resolve):
+        menu = "Test & Troubleshoot/uCPEs"
+
+        if source == 'control':
+            menu = "Test & Troubleshoot/uCPE Manager"
+
+        submenu = "Trace Route"
+        self._selector_submenu(ucpe_serial_number, menu, submenu)
+
+        self.driver.find_element_by_id("trace_route_test_destination").clear()
+        self.driver.find_element_by_id("trace_route_test_destination").send_keys(destination)
+        Select(self.driver.find_element_by_id("trace_route_test_source")).select_by_visible_text("{}".format(source))
+        self.driver.find_element_by_id("trace-route_test_max_hops").clear()
+        self.driver.find_element_by_id("trace-route_test_max_hops").send_keys(max_hop)
+        self.driver.find_element_by_id("trace_route_test_packet_size").clear()
+        self.driver.find_element_by_id("trace_route_test_packet_size").send_keys(packet_size)
+        self.driver.find_element_by_id("trace_route_test_run_btn").click()
+        self.waited_element_click(id="route_test", timeout_sec=10, with_error_check=True)
+        # time.sleep(60)  # Wait to complete
+        self.waited_element_click(id='trace_route_test_response', timeout_sec=120)
+        return self.driver.find_element_by_id("trace_route_test_response").text
+
+    def dns_resolution_test(self, ucpe_serial_number, source, hostname_or_ip):
+
+        menu = "Test & Troubleshoot/uCPEs"
+
+        if source == 'control':
+            menu = "Test & Troubleshoot/uCPE Manager"
+
+        submenu = "DNS Resolution"
+        self._selector_submenu(ucpe_serial_number, menu, submenu)
+
+        self.driver.find_element_by_id("dns_resolution_test_hostname_ip").clear()
+        self.driver.find_element_by_id("dns_resolution_test_hostname_ip").send_keys(hostname_or_ip)
+        self.driver.find_element_by_id("dns_resolution_test_run_btn").click()
+        time.sleep(10)
+        return self.driver.find_element_by_id("dns_resolution_test_response").text
+
+    def ucpe_logs_capture(self, ucpe_serial_number, source, since, unit='all', until=0):
+        since_options = {
+            5: 0,
+            15: 1,
+            30: 2,
+            60: 3
+        }
+
+        if since not in since_options:
+            raise ('Your chooice of since time is inproperly. Valid choise of time are 5,15,30,60 minutes ')
+
+        menu = "Test & Troubleshoot/uCPEs"
+
+        if source == 'control':
+            menu = "Test & Troubleshoot/uCPE Manager"
+            submenu = "Logs Capture"
+        else:
+            submenu = "uCPE Logs Capture"
+
+        self._selector_submenu(ucpe_serial_number, menu, submenu)
+
+        time.sleep(2)
+
+        if source == 'control':
+            Select(self.driver.find_element_by_id("logs_capture_MANAGER_since_select")).options[
+                since_options[int(since)]].click()
+        else:
+            Select(self.driver.find_element_by_id("logs_capture_UCPE_since_select")).options[
+                since_options[int(since)]].click()
+
+        self.waited_element_click(id="logs_capture_run_btn", timeout_sec=10, with_error_check=True)
+
+        # TODO WHEN FIX THE BUG CONVERT TO MINUTEST USING 'SINCE'
+        time.sleep(20)
+
+        if source == 'control':
+            logs_capture = self.driver.find_element_by_id("logs_capture_MANAGER_response").text
+        else:
+            logs_capture = self.driver.find_element_by_id("logs_capture_UCPE_response").text
+
+        return logs_capture
+
+    def controller_logs_capture(self, ucpe_serial_number, ucpe_ip_or_hostname, since, unit='all', until=0):
+        since_options = {
+            5: 0,
+            15: 1,
+            30: 2,
+            60: 3
+        }
+
+        if since not in since_options:
+            raise ('Your chooice of since time is inproperly. Valid choise of time are 5,15,30,60 minutes ')
+
+        menu = "Test & Troubleshoot/uCPEs"
+        submenu = "Controller Logs Capture"
+        self._selector_submenu(ucpe_serial_number, menu, submenu)
+
+        time.sleep(2)
+
+        Select(self.driver.find_element_by_id("logs_capture_CONTROLLER_since_select")).options[
+            since_options[int(since)]].click()
+
+        self.waited_element_click(xpath="(//button[@id='logs_capture_run_btn']/span)[2]", timeout_sec=10,
+                                  with_error_check=True)
+
+        # TODO WHEN FIX THE BUG CONVERT TO MINUTEST USING 'SINCE'
+        time.sleep(20)
+
+        return self.driver.find_element_by_id("logs_capture_CONTROLLER_response").text
+
+    def show_services(self, ucpe_serial_number, status, csv=True):
+
+        status_option = {
+            'ALL': 0,
+            'RUNNING': 1,
+            'EXITED': 2,
+            'FAILED': 3
+        }
+
+        possible_status = ['ALL', 'RUNNING', 'EXITED', 'FAILED']
+
+        if status not in possible_status:
+            raise Exception('InventoryInterface.showServices "status" parameter is set with wrong command name.\
+             Please choose between: {} '.format(possible_status))
+
+        menu = "Test & Troubleshoot/uCPEs"
+        submenu = "Show Services"
+        self._selector_submenu(ucpe_serial_number, menu, submenu)
+
+        time.sleep(2)
+
+        Select(self.driver.find_element_by_id("show_services_status_type")).options[status_option[str(status)]].click()
+
+        self.waited_element_click(
+            id="show_services_run_btn",
+            timeout_sec=10, with_error_check=True)
+
+        time.sleep(10)
+
+        show_services = self.driver.find_element_by_id("show_services").text
+
+        return show_services
+
+    def routing_table(self, ucpe_serial_number, ucpe_ip_or_hostname, csv=True):
+        menu = "Test & Troubleshoot/uCPEs"
+        submenu = "Routing Table"
+        self._selector_submenu(ucpe_serial_number, menu, submenu)
+        self.waited_element_click(
+            id="routing_table_run_btn",
+            timeout_sec=30, with_error_check=True)
+        show_routing_table = self.driver.find_element_by_id("ucpe_routing").text
+        return show_routing_table
+
+    def show_interfaces(self, ucpe_serial_number, ucpe_ip_or_hostname, interface_type, csv=True):
+        interface_options = {
+            'All': 0,
+            'Physical': 1,
+            'Virtual': 2,
+            'Nat': 3,
+            'Tunnel': 4,
+            'Lte': 5
+        }
+
+        if interface_type not in interface_options:
+            raise Exception('InventoryInterface.showServices "interfaceType" parameter is set with wrong command name.\
+             Please choose between: {} '.format(interface_options))
+
+        menu = "Test & Troubleshoot/uCPEs"
+        submenu = "Interface Table"
+        self._selector_submenu(ucpe_serial_number, menu, submenu)
+
+        time.sleep(2)
+
+        Select(self.driver.find_element_by_id("show_interfaces_type")).options[
+            interface_options[str(interface_type)]].click()
+
+        self.waited_element_click(
+            id="show_interfaces_run_btn",
+            timeout_sec=10, with_error_check=True)
+        time.sleep(20)
+        return self.driver.find_element_by_id("show_interfaces").text
+
+    def tcpdump_test(self, ucpe_serial_number, ucpe_ip_or_hostname, source, expression="", duration=10):
+        menu = "Test & Troubleshoot/uCPEs"
+        submenu = "TCP Dump"
+        ssh = None
+        if self.get_config('browser_hub'):
+            ssh = SSHInterface(config={
+                'ip': self.get_config('browser_hub'),
+                'username': self.get_config('browser_hub_username', 'root'),
+                'password': self.get_config('browser_hub_password', 'bjhv')
+            })
+            ssh.execute('rm -f /tmp/*.pcap')
+        else:
+            execute_shell_command('rm -f /tmp/*.pcap')
+        self._selector_submenu(ucpe_serial_number, menu, submenu)
+        Select(self.driver.find_element_by_id("tcp_dump_interface")).select_by_visible_text(source)
+        self.driver.find_element_by_id("tcp_dump_expression").clear()
+        self.driver.find_element_by_id("tcp_dump_expression").send_keys(expression)
+        self.driver.find_element_by_id("tcp_dump_duration").clear()
+        self.driver.find_element_by_id("tcp_dump_duration").send_keys(duration)
+        self.waited_element_click(id="tcp_dump_run_btn", timeout_sec=10, with_error_check=True)
+        time.sleep(20)  # Wait to complete
+        if self.get_config('browser_hub'):
+            file_name = str(ssh.execute('ls /tmp/*.pcap')).replace('\n', '')
+            return ssh.execute('tcpdump -ttttnnr {}'.format(file_name))
+        else:
+            file_name = str(execute_shell_command('ls /tmp/*.pcap')).replace('\n', '')
+            return execute_shell_command('tcpdump -ttttnnr {}'.format(file_name))
+
+    def speed_test(self, ucpe_serial_number, ucpe_ip_or_hostname):
+        menu = "Test & Troubleshoot/uCPEs"
+        submenu = "Speed Test"
+        self._selector_submenu(ucpe_serial_number, menu, submenu)
+        self.waited_element_click(id="speed_test_run_btn", timeout_sec=10, with_error_check=True)
+        time.sleep(30)  # Wait to complete
+        return self.driver.find_element_by_id("speed_test_response_ping").text
+
+    def click_clear_and_send_keys(self, element_name, value):
+        self.driver.find_element_by_id(element_name).click()
+        self.driver.find_element_by_id(element_name).clear()
+        self.driver.find_element_by_id(element_name).send_keys(value)
+
+    def set_encryption_and_authentication(self, ucpe, props, encryption_id, encrypt_value, auth_id, auth_value):
+        self.driver.find_element_by_xpath(props).click()
+        time.sleep(3)
+        Select(self.driver.find_element_by_id(encryption_id)).select_by_visible_text(get_value(ucpe, encrypt_value))
+        Select(self.driver.find_element_by_id(auth_id)).select_by_visible_text(get_value(ucpe, auth_value))
+        time.sleep(1)
+
+    def select_dh_group(self, ucpe, x_path_exp, dh_group_selector):
+        dh_all_items = [1, 2, 5, 14, 15, 16, 17, 18, 19, 20, 21, 27, 28, 29, 30, 31]
+        for dh_item in dh_all_items:  # Deselects all in Diffie Hellman Group
+            if self.driver.find_element_by_xpath(x_path_exp.format(dh_item)).is_selected():
+                self.driver.find_element_by_xpath(x_path_exp.format(dh_item)).click()
+                time.sleep(1)
+        for dh_item in get_value(ucpe, dh_group_selector, []):
+            self.driver.find_element_by_xpath(x_path_exp.format(dh_item)).click()
+            time.sleep(2)
+            if not self.driver.find_element_by_xpath(x_path_exp.format(dh_item)).is_selected():
+                self.driver.find_element_by_xpath(x_path_exp.format(dh_item)).click()
+
+    def manage_vdus(self, ucpe_hostname, vdus, action, answer):
+        possible_actions = ['Soft Reboot VDU', 'Hard Reboot VDU', 'Stop VDU', 'Start VDU', 'Rebuild VDU', 'Console VDU']
+
+        if action not in possible_actions:
+            raise Exception('InventoryInterface.manage_vdus "action" parameter is set with wrong action string.\
+             Please choose between: {} '.format(possible_actions))
+
+        menu = "Services & VNF LCM/VNF Management"
+        self.select_menu(menu)
+        self.driver.find_element_by_id("mainSearchBox").click()
+        self.driver.find_element_by_id("mainSearchBox").clear()
+        self.driver.find_element_by_id("mainSearchBox").send_keys(ucpe_hostname)
+        self.driver.find_element_by_id("filter_btn_ucpe").click()
+
+        self.waited_element_click(
+            xpath="(.//*[normalize-space(text()) and normalize-space(.)='Hostname uCPE'])[1]/following::td[1]",
+            timeout_sec=2, with_error_check=True)
+
+        self.driver.find_element_by_xpath(
+            "(.//*[normalize-space(text()) and normalize-space(.)='Status'])[1]/following::td[2]").click()
+        time.sleep(2)
+
+        for vdu in vdus:
+
+            self.driver.find_element_by_xpath("//tr[@id='{}']/td[12]/div/i".format(vdu['id'])).click()
+            self.waited_element_click(link_text="{}".format(action), timeout_sec=2, with_error_check=True)
+            if action == 'Console VDU':
+                time.sleep(5)
+                self.driver.find_element_by_link_text("Click here to open console in new tab").click()
+                time.sleep(5)
+
+            if answer.upper() == 'NO':
+                self.driver.find_element_by_xpath(
+                    "(.//*[normalize-space(text()) and normalize-space(.)='Yes'])[1]/following::button[1]").click()
+            else:
+                self.driver.find_element_by_xpath(
+                    "(.//*[normalize-space(text()) and normalize-space(.)='Confirmation'])[1]/following::button[1]") \
+                    .click()
+
+    def design_service_onboarding(self, template={}):
+
+        self.select_menu("Services & VNF Onboarding/VNF Images")
+        self.driver.find_element_by_link_text("Service Onboarding Designs").click()
+        self.waited_element_click(id="btn_add_new")
+
+        # On page 'Select uCPE Type'
+        while not self.driver.find_element_by_xpath("//div[label/text()='{}']".format(
+                get_value(template, 'selectedHwtype.device-type'))).is_displayed():
+            ''' 
+                Logic to scroll the 'Select uCPE Type' bar and select device
+            '''
+            self.driver.find_element_by_xpath("//a[@class='carousel-control-next']").click()
+
+        self.driver.find_element_by_xpath("//div[label/text()='{}']".format(
+            get_value(template, 'selectedHwtype.device-type'))).click()  # Choose device type on page 'Select uCPE Type'
+
+        self.waited_element_click(xpath="//input[@value='{}']".format(
+            get_value(template, 'controllerType')))  # Choose controller type on page 'Select uCPE Type'
+        self.waited_element_click(xpath="//input[@value='{}']".format(
+            get_value(template, 'hwAcceleration')))  # Choose hardware acceleration on page 'Select uCPE Type'
+
+        '''
+            Selects 'DPDK Reserved' incase of 'DPDK'.
+            
+            NOTE: 'VirtIO' and 'SRIOV' DO NOT USE 'DPDK Reserved' 
+        '''
+        if get_value(template, 'hwAcceleration') == 'DPDK':
+            self.driver.find_element_by_id("dpdk_cores_input").click()
+            self.driver.find_element_by_id('dpdk_cores_input').send_keys(Keys.CONTROL + "a")
+            self.driver.find_element_by_id('dpdk_cores_input').send_keys(Keys.DELETE)
+            self.driver.find_element_by_id("dpdk_cores_input").send_keys(get_value(
+                template, 'dpdkCores'))
+
+        if get_value(template, 'hostReservedCores') is not None and get_value(template, 'hostReservedCores') > 1:
+            self.driver.find_element_by_id("reserved_host_cores_input").click()
+            self.driver.find_element_by_id('reserved_host_cores_input').send_keys(Keys.CONTROL + "a")
+            self.driver.find_element_by_id('reserved_host_cores_input').send_keys(Keys.DELETE)
+            self.driver.find_element_by_id("reserved_host_cores_input").send_keys(get_value(
+                template, 'hostReservedCores'))
+
+        '''
+            Next few lines adds 'Service Type Name' and 'Description' on page 'Select uCPE Type'
+        '''
+        self.waited_element_click(xpath="//div[@class='service-name']/input")
+        self.driver.find_element_by_xpath("//div[@class='service-name']/input").clear()
+        self.driver.find_element_by_xpath("//div[@class='service-name']/input").send_keys(
+            get_value(template, 'serviceName'))
+        self.waited_element_click(xpath="//div[@class='service-name']/textarea")
+        self.driver.find_element_by_xpath("//div[@class='service-name']/textarea").clear()
+        self.driver.find_element_by_xpath("//div[@class='service-name']/textarea").send_keys(
+            get_value(template, 'serviceDescription'))
+
+        self.waited_element_click(xpath="//div[label/text()='Select VNF']/i")
+        flavors = get_value(template, 'list.flavors')  # On page 'VNF Selection from Catalog'
+        for flavor_name in flavors:
+            self.driver.find_element_by_xpath("//table/tbody/tr[td/text()='{}']".format(flavor_name)).click()
+            self.waited_element_click(xpath="//div[label/text()='Add VNF']/i")
+
+        self.waited_element_click(xpath="//div[label/text()='Configure CloudInit']/i")
+        self.waited_element_click(xpath="//div[label/text()='Select vNICs']/i")
+
+        vms = self.driver.find_elements_by_xpath(
+            "//*[@class='vms-wrapper']/div/select")  # On page 'Networking Composition'
+        v_vic_numbers = get_value(template, 'list.vNicNumber')
+        for vm_name, v_vic in zip(vms, v_vic_numbers):
+            Select(vm_name).select_by_visible_text(v_vic)
+
+        self.waited_element_click(xpath="//div[label/text()='Select ports with NAT']/i")
+        # At step 'Choose NAT for the ports'
+        for natPort in get_value(template, 'list.natPort'):
+            self.waited_element_click(xpath="//div[div/text()='{}']/./img".format(natPort))
+        self.driver.find_element_by_xpath("//*[@class='fas fa-chevron-circle-right']").click()
+
+        # At step 'Attach networks to ports'
+        dev_ports = get_value(template, 'list.devPort')
+        vm_ports = get_value(template, 'list.vmPort')
+        for dev_port, vm_port in zip(dev_ports, vm_ports):
+            self.waited_element_click(id="{}".format(dev_port))
+            self.waited_element_click(id="{}".format(vm_port))
+            self.waited_element_click(xpath="//table[@class='table table-striped table-hover']/tbody/tr")
+            self.waited_element_click(xpath="//*[@class='fas fa-plus-circle']")
+
+        # At step 'Generate Tosca Template'
+        self.waited_element_click(xpath="//div[label/text()='VNF Service Chain']/i")
+        self.driver.find_element_by_xpath("//div[label/text()='Generate Tosca Template']/i").click()
+        self.waited_element_click(xpath="//*[@class='btn btn-outline-dark'][text()='Yes']")
+        time.sleep(10)
